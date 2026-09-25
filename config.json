@@ -1,0 +1,9 @@
+{
+ "laya_rerank": {
+  "enabled": true,
+  "endpoint": "http://127.0.0.1:8015/v1/systemone",
+  "top_n": 10,
+  "timeout_s": 2.0,
+  "min_confidence": 0.5
+ }
+}
