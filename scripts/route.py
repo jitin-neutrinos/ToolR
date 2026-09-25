@@ -96,14 +96,14 @@ def _save_state(picks: list[str], prompt_id: str, skills_needed: bool) -> None:
         pass
 
 
-def card_for(prompt: str, cwd: Path, prompt_id: str = "") -> str:
+def card_for(prompt: str, cwd: Path, prompt_id: str = "", rewrite: bool = True) -> str:
     cfg = rc.load_config()
     if not cfg.get("enabled", True):
         return ""
     index = get_index(cwd, cfg)
     try:
         import pipeline
-        result = pipeline.run(prompt, cwd, cfg, index)
+        result = pipeline.run(prompt, cwd, cfg, index, rewrite=rewrite)
         card = result["card"]
         _save_state(result["picks"], prompt_id or _prompt_key(prompt), bool(result["picks"]))
         return card
@@ -154,6 +154,8 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="emit hook JSON even outside --hook")
     ap.add_argument("--event", default="UserPromptSubmit",
                     help="hook event name to echo back (Gemini CLI uses BeforeAgent)")
+    ap.add_argument("--no-rewrite", action="store_true",
+                    help="skip the LLM prompt-engineer stage (fast, routing only)")
     ap.add_argument("--selftest", action="store_true", help="run the router's own checks")
     args = ap.parse_args()
 
@@ -185,7 +187,8 @@ def main() -> int:
         return 0
 
     try:
-        card = card_for(prompt, cwd_path, str(payload.get("prompt_id", "")) if args.hook else "")
+        card = card_for(prompt, cwd_path, str(payload.get("prompt_id", "")) if args.hook else "",
+                        rewrite=not args.no_rewrite)
     except Exception as exc:  # a router must never break the user's turn
         if os.environ.get("TOOL_ROUTER_DEBUG"):
             print(f"tool-router error: {exc}", file=sys.stderr)

@@ -98,8 +98,11 @@ def _coverage(picks: list[dict]) -> list[str]:
     return out or ["nothing scored above threshold — proceeding unaided is fine"]
 
 
-def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None) -> dict:
-    """Full pipeline. Returns {card, picks, rewritten, n, provider}."""
+def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
+        rewrite: bool = True) -> dict:
+    """Full pipeline. Returns {card, picks, rewritten, n, provider}.
+
+    rewrite=False skips stage 2/3 (LLM prompt-engineer): routing only, no LLM call."""
     cfg = cfg or rc.load_config()
     index = index or rc.load_index() or rc.build_index(cwd)
     from pathlib import Path as _P
@@ -111,15 +114,16 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None) ->
     ranked1 = _route_once(prompt, index, stack, cfg, dense_path, n)
     picks1 = _top_combined(ranked1, cfg, n)
 
-    # Stage 2 — prompt engineer (fail-open)
+    # Stage 2 — prompt engineer (fail-open; skipped with rewrite=False)
     rewritten, provider = None, None
-    try:
-        import rewriter
-        out = rewriter.rewrite(prompt, _route_ctx(picks1), cfg)
-        if out:
-            rewritten, provider = out["prompt"], out["provider"]
-    except Exception:
-        pass
+    if rewrite:
+        try:
+            import rewriter
+            out = rewriter.rewrite(prompt, _route_ctx(picks1), cfg)
+            if out:
+                rewritten, provider = out["prompt"], out["provider"]
+        except Exception:
+            pass
 
     # Stage 3 — re-route the rewritten prompt
     merged_picks = picks1
