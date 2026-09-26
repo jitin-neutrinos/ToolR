@@ -1,7 +1,9 @@
 # Graph Report - tool-router  (2026-09-26)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 17 files · ~17,616 words
+- Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 1 file(s) not represented in the graph (top: (none) 1)
 
 ## Summary
 - 233 nodes · 456 edges · 9 communities
@@ -27,19 +29,19 @@
 ## God Nodes (most connected - your core abstractions)
 1. `tool-router` - 20 edges
 2. `tool-router — Extensive Review (2026-09-25)` - 16 edges
-3. `score()` - 15 edges
-4. `card_for()` - 15 edges
+3. `card_for()` - 15 edges
+4. `score()` - 15 edges
 5. `build_index()` - 13 edges
 6. `run()` - 12 edges
 7. `home()` - 10 edges
 8. `tokenize()` - 9 edges
 9. `_index()` - 9 edges
-10. `scaffold()` - 8 edges
+10. `get_index()` - 8 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `P1 — The newest, most complex code path has zero test coverage` --references--> `card_for()`  [INFERRED]
-  REVIEW-2026-09-25.md → scripts/route.py
 - `P2 — Detached-rebuild stampede (tiny)` --references--> `get_index()`  [INFERRED]
+  REVIEW-2026-09-25.md → scripts/route.py
+- `P1 — The newest, most complex code path has zero test coverage` --references--> `card_for()`  [INFERRED]
   REVIEW-2026-09-25.md → scripts/route.py
 - `P0 — Score-scale collapse: dense-only hits can never make the card` --references--> `select()`  [INFERRED]
   REVIEW-2026-09-25.md → scripts/router_core.py
@@ -95,7 +97,7 @@ Cohesion: 0.12
 Nodes (16): Accuracy spot-check (12 queries, full pipeline), Enhancement shortlist (post-fix, ranked by value/effort), P0 — Repo has uncommitted work, P0 — Score-scale collapse: dense-only hits can never make the card, P0 — Straggler rows bypass fusion on a different scale, P1 — Circuit breakers are process-local, so they never persist, P1 — Laya rerank costs ~0.9–1.1 s on EVERY prompt, for override-able value, P2 — Dead config + doc drift (+8 more)
 
 ## Knowledge Gaps
-- **26 isolated node(s):** `Accuracy spot-check (12 queries, full pipeline)`, `Enhancement shortlist (post-fix, ranked by value/effort)`, `P0 — Repo has uncommitted work`, `P1 — Circuit breakers are process-local, so they never persist`, `P1 — Laya rerank costs ~0.9–1.1 s on EVERY prompt, for override-able value` (+21 more)
+- **26 isolated node(s):** `Verdict`, `P0 — Repo has uncommitted work`, `P1 — Laya rerank costs ~0.9–1.1 s on EVERY prompt, for override-able value`, `P1 — Circuit breakers are process-local, so they never persist`, `P2 — Enforcement gate is latent-broken (not currently wired, so dormant)` (+21 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 91 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 
 ## Suggested Questions
@@ -107,7 +109,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.069) - this node is a cross-community bridge._
 - **Why does `card_for()` connect `route.py` to `tool-router — Extensive Review (2026-09-25)`, `selftest.py`, `router_core.py`, `run`?**
   _High betweenness centrality (0.050) - this node is a cross-community bridge._
-- **What connects `Accuracy spot-check (12 queries, full pipeline)`, `Enhancement shortlist (post-fix, ranked by value/effort)`, `P0 — Repo has uncommitted work` to the rest of the system?**
+- **What connects `Verdict`, `P0 — Repo has uncommitted work`, `P1 — Laya rerank costs ~0.9–1.1 s on EVERY prompt, for override-able value` to the rest of the system?**
   _26 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `router_core.py` be split into smaller, more focused modules?**
   _Cohesion score 0.11428571428571428 - nodes in this community are weakly interconnected._

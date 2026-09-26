@@ -246,6 +246,28 @@ def t_user_n():
     assert pipeline.user_n("top 0 tools") == 1, "clamp to >=1"
 
 
+def t_laya_gate():
+    """gate_accept beats chance, not a fixed margin: calibrated on 2026-09-26
+    probe data where correct picks over 5 similar candidates scored p1
+    0.25-0.32, margin 0.02-0.08 — all previously vetoed by margin < 0.10."""
+    import laya_rerank
+    g = laya_rerank.gate_accept
+    # the four real declined probes must now pass
+    assert g(0.246, 0.022, 5), "review-elixir case"
+    assert g(0.304, 0.077, 5), "rest-api-design case"
+    assert g(0.318, 0.029, 5), "prisma-postgres case"
+    assert g(0.290, 0.065, 5), "tool-router-engineering case"
+    # uniform noise (all options ~equal) must still fail: margin ~0
+    assert not g(0.21, 0.001, 5), "flat distribution = no signal"
+    # below-chance p1 must fail even with a margin (impossible-ish, but guard)
+    assert not g(0.15, 0.02, 5), "below 1.2x uniform"
+    # legacy strong pick passes regardless of margin
+    assert g(0.90, 0.01, 5), "strong p1 passes"
+    # 2-option case: uniform = 0.5, needs p1 >= 0.6 + margin 0.02
+    assert not g(0.55, 0.05, 2), "2-option near-tie declined"
+    assert g(0.65, 0.10, 2), "2-option clear winner accepted"
+
+
 def t_breaker_files():
     import json as _json
     import laya_rerank, dense_index

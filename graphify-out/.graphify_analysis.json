@@ -2,11 +2,12 @@
   "communities": {
     "0": [
       "math",
-      "re",
       "scripts_index_build_main",
       "scripts_router_core",
       "scripts_router_core_build_index",
       "scripts_router_core_counts",
+      "scripts_router_core_coverage_lines",
+      "scripts_router_core_dense_hash_item_key",
       "scripts_router_core_dep_tokens",
       "scripts_router_core_discover_mcp",
       "scripts_router_core_discover_md_assets",
@@ -17,13 +18,17 @@
       "scripts_router_core_parse_frontmatter",
       "scripts_router_core_py_path",
       "scripts_router_core_rationale_1",
+      "scripts_router_core_rationale_1008",
       "scripts_router_core_rationale_134",
       "scripts_router_core_rationale_176",
       "scripts_router_core_rationale_24",
       "scripts_router_core_rationale_272",
       "scripts_router_core_rationale_390",
       "scripts_router_core_rationale_465",
+      "scripts_router_core_rationale_871",
       "scripts_router_core_read_head",
+      "scripts_router_core_render_pipeline_card",
+      "scripts_router_core_route_cwd",
       "scripts_router_core_save_index",
       "scripts_router_core_skill_dirs",
       "scripts_router_core_stack_tokens",
@@ -47,10 +52,11 @@
       "scripts_selftest_rationale_188",
       "scripts_selftest_rationale_2",
       "scripts_selftest_rationale_205",
-      "scripts_selftest_rationale_214",
+      "scripts_selftest_rationale_267",
       "scripts_selftest_rationale_47",
       "scripts_selftest_rationale_95",
       "scripts_selftest_t_aliases_and_db_gate",
+      "scripts_selftest_t_breaker_files",
       "scripts_selftest_t_card",
       "scripts_selftest_t_dep_stack",
       "scripts_selftest_t_framing",
@@ -62,6 +68,7 @@
       "scripts_selftest_t_scaffold",
       "scripts_selftest_t_stack_boost",
       "scripts_selftest_t_tokenize",
+      "scripts_selftest_t_user_n",
       "tempfile"
     ],
     "2": [
@@ -96,27 +103,19 @@
     ],
     "3": [
       "hashlib",
-      "json",
       "scripts_dense_index",
+      "scripts_dense_index_breaker_active",
       "scripts_dense_index_build_dense",
       "scripts_dense_index_dense_rank",
       "scripts_dense_index_embed",
       "scripts_dense_index_item_hash",
       "scripts_dense_index_py_path",
-      "scripts_dense_index_rationale_106",
+      "scripts_dense_index_rationale_137",
       "scripts_dense_index_rationale_2",
-      "scripts_dense_index_rationale_28",
-      "scripts_dense_index_rationale_51",
-      "scripts_laya_rerank",
-      "scripts_laya_rerank_ask",
-      "scripts_laya_rerank_load_laya_cfg",
-      "scripts_laya_rerank_rationale_15",
-      "scripts_laya_rerank_rationale_2",
-      "scripts_laya_rerank_rationale_50",
-      "scripts_laya_rerank_rerank",
-      "socket",
-      "urllib_error",
-      "urllib_request"
+      "scripts_dense_index_rationale_32",
+      "scripts_dense_index_rationale_59",
+      "scripts_dense_index_rationale_82",
+      "scripts_dense_index_trip"
     ],
     "4": [
       "install",
@@ -143,29 +142,29 @@
       "shutil"
     ],
     "5": [
+      "review_2026_09_25_p1_the_newest_most_complex_code_path_has_zero_test_coverage",
+      "review_2026_09_25_p2_detached_rebuild_stampede_tiny",
       "scripts_route",
       "scripts_route_card_for",
-      "scripts_route_card_for_fused_score",
       "scripts_route_get_index",
       "scripts_route_load_state",
       "scripts_route_main",
+      "scripts_route_prompt_key",
       "scripts_route_py_path",
       "scripts_route_rationale_2",
-      "scripts_route_rationale_37",
+      "scripts_route_rationale_40",
       "scripts_route_rebuild_detached",
       "scripts_route_record",
       "scripts_route_save_state",
-      "scripts_router_core_index_path",
-      "scripts_router_core_load_config",
-      "scripts_router_core_load_index",
-      "scripts_router_core_load_learned",
-      "scripts_router_core_rationale_754",
-      "scripts_router_core_select",
-      "scripts_session_card_main",
+      "scripts_router_core_rationale_620",
+      "scripts_router_core_skip_reason",
+      "scripts_selftest_rationale_173",
+      "scripts_selftest_t_skip_reason",
       "subprocess"
     ],
     "6": [
       "argparse",
+      "json",
       "os",
       "pathlib",
       "scripts_gate",
@@ -177,29 +176,92 @@
       "scripts_gate_write",
       "scripts_index_build",
       "scripts_index_build_rationale_2",
+      "scripts_laya_rerank",
+      "scripts_laya_rerank_ask",
+      "scripts_laya_rerank_breaker_active",
+      "scripts_laya_rerank_load_laya_cfg",
+      "scripts_laya_rerank_rationale_16",
+      "scripts_laya_rerank_rationale_2",
+      "scripts_laya_rerank_rationale_44",
+      "scripts_laya_rerank_rationale_82",
+      "scripts_laya_rerank_rerank",
+      "scripts_laya_rerank_trip",
+      "scripts_rewriter",
+      "scripts_rewriter_breaker_active",
+      "scripts_rewriter_key",
+      "scripts_rewriter_load_config",
+      "scripts_rewriter_post",
+      "scripts_rewriter_rationale_121",
+      "scripts_rewriter_rationale_2",
+      "scripts_rewriter_rewrite",
+      "scripts_rewriter_trip_breaker",
       "scripts_session_card",
+      "scripts_session_card_main",
       "scripts_session_card_rationale_2",
-      "sys",
+      "socket",
       "test_hybrid",
       "test_hybrid_rationale_2",
-      "time"
+      "time",
+      "urllib_error",
+      "urllib_request"
     ],
     "7": [
-      "scripts_router_core_rationale_620",
-      "scripts_router_core_skip_reason",
-      "scripts_selftest_rationale_173",
-      "scripts_selftest_t_skip_reason"
+      "re",
+      "scripts_pipeline",
+      "scripts_pipeline_coverage",
+      "scripts_pipeline_rationale_103",
+      "scripts_pipeline_rationale_2",
+      "scripts_pipeline_rationale_38",
+      "scripts_pipeline_rationale_68",
+      "scripts_pipeline_route_ctx",
+      "scripts_pipeline_route_once",
+      "scripts_pipeline_run",
+      "scripts_pipeline_top_combined",
+      "scripts_pipeline_user_n",
+      "scripts_router_core_dense_hash_of",
+      "scripts_router_core_fuse",
+      "scripts_router_core_fuse_dense_bonus",
+      "scripts_router_core_fuse_rrf",
+      "scripts_router_core_index_path",
+      "scripts_router_core_load_config",
+      "scripts_router_core_load_index",
+      "scripts_router_core_load_learned",
+      "scripts_router_core_rationale_761",
+      "scripts_router_core_rationale_769",
+      "scripts_selftest_rationale_214",
+      "scripts_selftest_t_fusion_scale",
+      "sys"
+    ],
+    "8": [
+      "review_2026_09_25",
+      "review_2026_09_25_accuracy_spot_check_12_queries_full_pipeline",
+      "review_2026_09_25_enhancement_shortlist_post_fix_ranked_by_value_effort",
+      "review_2026_09_25_p0_repo_has_uncommitted_work",
+      "review_2026_09_25_p0_score_scale_collapse_dense_only_hits_can_never_make_the_card",
+      "review_2026_09_25_p0_straggler_rows_bypass_fusion_on_a_different_scale",
+      "review_2026_09_25_p1_circuit_breakers_are_process_local_so_they_never_persist",
+      "review_2026_09_25_p1_laya_rerank_costs_0_9_1_1_s_on_every_prompt_for_override_able_value",
+      "review_2026_09_25_p2_dead_config_doc_drift",
+      "review_2026_09_25_p2_enforcement_gate_is_latent_broken_not_currently_wired_so_dormant",
+      "review_2026_09_25_p2_state_file_races_minor_advisory_only_today",
+      "review_2026_09_25_positive_findings_keep",
+      "review_2026_09_25_suggested_order_of_work",
+      "review_2026_09_25_tool_router_extensive_review_2026_09_25",
+      "review_2026_09_25_verdict",
+      "scripts_router_core_rationale_855",
+      "scripts_router_core_select"
     ]
   },
   "cohesion": {
-    "0": 0.1425287356321839,
-    "1": 0.11264367816091954,
+    "0": 0.11428571428571428,
+    "1": 0.1028225806451613,
     "2": 0.082010582010582,
-    "3": 0.12554112554112554,
+    "3": 0.23076923076923078,
     "4": 0.24675324675324675,
-    "5": 0.1631578947368421,
-    "6": 0.1568627450980392,
-    "7": 0.5
+    "5": 0.15789473684210525,
+    "6": 0.07682926829268293,
+    "7": 0.11,
+    "8": 0.125
   },
   "gods": [
     {
@@ -208,19 +270,29 @@
       "degree": 20
     },
     {
+      "id": "review_2026_09_25_tool_router_extensive_review_2026_09_25",
+      "label": "tool-router — Extensive Review (2026-09-25)",
+      "degree": 16
+    },
+    {
+      "id": "scripts_router_core_score",
+      "label": "score()",
+      "degree": 15
+    },
+    {
       "id": "scripts_route_card_for",
       "label": "card_for()",
       "degree": 15
     },
     {
-      "id": "scripts_router_core_score",
-      "label": "score()",
-      "degree": 14
-    },
-    {
       "id": "scripts_router_core_build_index",
       "label": "build_index()",
-      "degree": 11
+      "degree": 13
+    },
+    {
+      "id": "scripts_pipeline_run",
+      "label": "run()",
+      "degree": 12
     },
     {
       "id": "install_home",
@@ -238,22 +310,56 @@
       "degree": 9
     },
     {
-      "id": "scripts_router_core_index_path",
-      "label": "index_path()",
+      "id": "scripts_router_core_scaffold",
+      "label": "scaffold()",
       "degree": 8
-    },
-    {
-      "id": "scripts_router_core_discover_plugin_assets",
-      "label": "discover_plugin_assets()",
-      "degree": 7
-    },
-    {
-      "id": "scripts_router_core_discover_skills",
-      "label": "discover_skills()",
-      "degree": 7
     }
   ],
   "surprises": [
+    {
+      "source": "P1 — The newest, most complex code path has zero test coverage",
+      "target": "card_for()",
+      "source_files": [
+        "REVIEW-2026-09-25.md",
+        "scripts/route.py"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; crosses file types (code ↔ doc); connects across different repos/directories; peripheral node `P1 — The newest, most complex code path has zero test coverage` unexpectedly reaches hub `card_for()`"
+    },
+    {
+      "source": "P2 — Detached-rebuild stampede (tiny)",
+      "target": "get_index()",
+      "source_files": [
+        "REVIEW-2026-09-25.md",
+        "scripts/route.py"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; crosses file types (code ↔ doc); connects across different repos/directories; peripheral node `P2 — Detached-rebuild stampede (tiny)` unexpectedly reaches hub `get_index()`"
+    },
+    {
+      "source": "P0 — Score-scale collapse: dense-only hits can never make the card",
+      "target": "select()",
+      "source_files": [
+        "REVIEW-2026-09-25.md",
+        "scripts/router_core.py"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; crosses file types (code ↔ doc); connects across different repos/directories; peripheral node `P0 — Score-scale collapse: dense-only hits can never make the card` unexpectedly reaches hub `select()`"
+    },
+    {
+      "source": "P0 — Straggler rows bypass fusion on a different scale",
+      "target": "select()",
+      "source_files": [
+        "REVIEW-2026-09-25.md",
+        "scripts/router_core.py"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; crosses file types (code ↔ doc); connects across different repos/directories; peripheral node `P0 — Straggler rows bypass fusion on a different scale` unexpectedly reaches hub `select()`"
+    },
     {
       "source": "tool-router",
       "target": "Codex CLI",
@@ -264,87 +370,43 @@
       "confidence": "EXTRACTED",
       "relation": "implements",
       "why": "connects across different repos/directories; peripheral node `Codex CLI` unexpectedly reaches hub `tool-router`"
-    },
-    {
-      "source": "tool-router",
-      "target": "Gemini CLI",
-      "source_files": [
-        "README.md",
-        "references/harnesses.md"
-      ],
-      "confidence": "EXTRACTED",
-      "relation": "implements",
-      "why": "connects across different repos/directories; peripheral node `Gemini CLI` unexpectedly reaches hub `tool-router`"
-    },
-    {
-      "source": "tool-router",
-      "target": "Ollama",
-      "source_files": [
-        "README.md",
-        "research-stage1-verdict.md"
-      ],
-      "confidence": "EXTRACTED",
-      "relation": "references",
-      "why": "connects across different repos/directories; peripheral node `Ollama` unexpectedly reaches hub `tool-router`"
-    },
-    {
-      "source": "tool-router",
-      "target": "OpenClaw",
-      "source_files": [
-        "README.md",
-        "references/harnesses.md"
-      ],
-      "confidence": "EXTRACTED",
-      "relation": "implements",
-      "why": "connects across different repos/directories; peripheral node `OpenClaw` unexpectedly reaches hub `tool-router`"
-    },
-    {
-      "source": "tool-router",
-      "target": "OpenCode",
-      "source_files": [
-        "README.md",
-        "references/harnesses.md"
-      ],
-      "confidence": "EXTRACTED",
-      "relation": "implements",
-      "why": "connects across different repos/directories; peripheral node `OpenCode` unexpectedly reaches hub `tool-router`"
     }
   ],
   "questions": [
     {
       "type": "bridge_node",
-      "question": "Why does `score()` connect `selftest.py` to `router_core.py`, `route.py`?",
-      "why": "High betweenness centrality (0.042) - this node is a cross-community bridge."
+      "question": "Why does `tool-router — Extensive Review (2026-09-25)` connect `tool-router — Extensive Review (2026-09-25)` to `route.py`?",
+      "why": "High betweenness centrality (0.089) - this node is a cross-community bridge."
     },
     {
       "type": "bridge_node",
-      "question": "Why does `card_for()` connect `route.py` to `router_core.py`, `selftest.py`?",
-      "why": "High betweenness centrality (0.032) - this node is a cross-community bridge."
+      "question": "Why does `select()` connect `tool-router — Extensive Review (2026-09-25)` to `router_core.py`, `selftest.py`, `route.py`, `run`?",
+      "why": "High betweenness centrality (0.069) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `card_for()` connect `route.py` to `tool-router — Extensive Review (2026-09-25)`, `selftest.py`, `router_core.py`, `run`?",
+      "why": "High betweenness centrality (0.050) - this node is a cross-community bridge."
     },
     {
       "type": "isolated_nodes",
-      "question": "What connects `Config JSON File`, `Cursor`, `Index JSON File` to the rest of the system?",
-      "why": "15 weakly-connected nodes found - possible documentation gaps or missing edges."
+      "question": "What connects `Accuracy spot-check (12 queries, full pipeline)`, `Enhancement shortlist (post-fix, ranked by value/effort)`, `P0 — Repo has uncommitted work` to the rest of the system?",
+      "why": "26 weakly-connected nodes found - possible documentation gaps or missing edges."
     },
     {
       "type": "low_cohesion",
       "question": "Should `router_core.py` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.1425287356321839 - nodes in this community are weakly interconnected."
+      "why": "Cohesion score 0.11428571428571428 - nodes in this community are weakly interconnected."
     },
     {
       "type": "low_cohesion",
       "question": "Should `selftest.py` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.11264367816091954 - nodes in this community are weakly interconnected."
+      "why": "Cohesion score 0.1028225806451613 - nodes in this community are weakly interconnected."
     },
     {
       "type": "low_cohesion",
       "question": "Should `tool-router` be split into smaller, more focused modules?",
       "why": "Cohesion score 0.082010582010582 - nodes in this community are weakly interconnected."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `dense_index.py` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.12554112554112554 - nodes in this community are weakly interconnected."
     }
   ]
 }

@@ -9,11 +9,13 @@ Config (config.json -> laya_rerank):
     enabled: true
     endpoint: http://127.0.0.1:8015/v1/systemone
     top_n: 5            # candidates sent to Laya (fewer = faster; 10 cost ~1s)
-    timeout_s: 0.6      # a slow rerank is not worth the prompt's wait
+    timeout_s: 10.0     # measured Laya RTT ~0.8-1s under load; 0.6 vetoed answers
 Note: the old min_confidence key is gone — the margin gate below is the real
 decision rule; min_confidence was never read.
 """
-# NOTE: 0.5 = argmax tie-break point; useful rerank signal lives around 0.52+.
+# NOTE: the gate (gate_accept) compares the pick against the uniform baseline
+# 1/N, not a fixed margin — with N similar candidates probabilities flatten
+# toward chance and empirically-correct picks score p1 0.25-0.32 over 5 options.
 from __future__ import annotations
 
 import json
@@ -78,6 +80,22 @@ def _ask(endpoint: str, state: dict, questions: dict, timeout: float) -> dict | 
         return None
 
 
+def gate_accept(p1: float, margin: float, n_opts: int) -> bool:
+    """Decision rule for promoting Laya's pick. Pure function (selftest-covered).
+
+    With N similar candidates the classifier's mass spreads toward the uniform
+    baseline 1/N (measured 2026-09-26: true-positive picks landed at p1
+    0.25-0.32 over 5 options, margins 0.02-0.08), so a fixed margin floor
+    (0.10) vetoes correct picks almost always. Compare against chance instead:
+      accept when the pick clears 1.2x uniform AND leads runner-up by >=0.02,
+      or in the legacy strong case (p1 >= 0.75) regardless of margin.
+    """
+    uniform = 1.0 / max(n_opts, 2)
+    if p1 >= 0.75:
+        return True
+    return margin >= 0.02 and p1 >= 1.2 * uniform
+
+
 def rerank(ranked: list[dict], prompt: str, base_cfg: dict) -> list[dict]:
     """Return the ranked list, possibly reordered by Laya's pick + annotated."""
     cfg = load_laya_cfg(base_cfg)
@@ -106,14 +124,14 @@ def rerank(ranked: list[dict], prompt: str, base_cfg: dict) -> list[dict]:
 
     pick = answers.get("pick", {})
     picked_name = pick.get("choice")
-    # Gate on margin over the second-best option, not the raw argmax: with N
-    # similar candidates the argmax probability hovers near 0.5 and an absolute
-    # threshold misfires. Margin is stable across candidate counts.
+    # Gate on whether the pick beats chance (see gate_accept), not on a fixed
+    # margin: with N similar candidates probabilities flatten toward 1/N and a
+    # fixed 0.10 margin vetoed empirically-correct picks (2026-09-26 probe data).
     probs = pick.get("probabilities") or {}
     others = sorted((float(v) for k, v in probs.items() if k != picked_name), reverse=True)
     p1 = float(probs.get(picked_name, 0.0))
     margin = p1 - others[0] if others else p1
-    if not picked_name or (margin < 0.10 and p1 < 0.75):
+    if not picked_name or not gate_accept(p1, margin, len(top)):
         for r in ranked:
             r["laya"] = "low-conf"
         return ranked
