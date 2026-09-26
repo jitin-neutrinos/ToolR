@@ -3,3 +3,5 @@ __pycache__/
 .serena/
 graphify-out/cache/
 *.lock
+graphify-out/
+__pycache__/
