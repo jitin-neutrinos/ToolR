@@ -137,6 +137,28 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
 
     card = rc.render_pipeline_card(prompt, rewritten, provider, merged_picks,
                                    picks1, n, stack, cfg, index.get("stats", {}))
-    names = [f"{r['kind']}:{r['name']}" for r in merged_picks]
+    names = [f"{kind}:{name}" for kind, name in
+             ((r['kind'], r['name']) for r in merged_picks)]
+
+    # Gap tracking + sourcing tiers (never blocks, never routes). Cheap score
+    # floor gates gap RECORDING; the Laya oracle runs only inside the auto
+    # tier (a wrong-but-confident match can outscore a correct one — see
+    # source.gap_oracle — so unattended installs get the semantic verdict).
+    try:
+        import gaptrack
+        import source as _source
+        hit, entry = _source.auto_install(prompt, prompt, cfg, merged_picks)
+        if hit and hit.get("ok"):
+            card += (f"\n\n**Auto-sourced** (repeated gap, free + screened): "
+                     f"installed skill `{hit['installed']}` and reindexed — "
+                     f"it will route from the next turn. Say 'undo sourcing' "
+                     f"to remove.")
+        elif entry.get("served") is True and not hit:
+            card += (f"\n\n**Oracle: no local capability serves this.** To search "
+                     f"free registries (installed only on your approval): "
+                     f"~/.tool-router/route --source \"{prompt[:60]}\"")
+    except Exception:
+        pass  # sourcing must never break routing
+
     return {"card": card, "picks": names, "rewritten": rewritten,
             "provider": provider, "n": n}

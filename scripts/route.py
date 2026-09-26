@@ -156,11 +156,55 @@ def main() -> int:
                     help="hook event name to echo back (Gemini CLI uses BeforeAgent)")
     ap.add_argument("--no-rewrite", action="store_true",
                     help="skip the LLM prompt-engineer stage (fast, routing only)")
+    ap.add_argument("--source", action="store_true",
+                    help="HITL: search registries for the query, print screened candidates")
+    ap.add_argument("--source-remove", default=None, metavar="SKILL",
+                    help="undo a sourced skill (removes sourced/SKILL + reindexes)")
     ap.add_argument("--selftest", action="store_true", help="run the router's own checks")
     args = ap.parse_args()
 
     if args.selftest:
         os.execv(sys.executable, [sys.executable, str(SELF.parent / "selftest.py")])
+
+    if args.source_remove:
+        try:
+            import source as _src
+            detail = _src.distribute_skill(args.source_remove, remove=True)
+            src_dir = Path.home() / ".hermes/skills/sourced" / args.source_remove
+            if src_dir.exists():
+                import shutil as _sh
+                _sh.rmtree(src_dir)
+            wiring = _src.wire_fleet()
+            print(f"removed {args.source_remove}: harnesses={detail}, wiring={wiring}")
+        except Exception as exc:
+            print(f"remove failed: {exc!r}")
+        return 0
+
+    if args.source:
+        prompt = " ".join(args.prompt).strip()
+        if not prompt:
+            print("usage: route.py --source \"<what you need>\"")
+            return 0
+        try:
+            import source as _src
+            cands = _src.propose(prompt)
+        except Exception as exc:
+            print(f"sourcing failed (fail-open): {exc!r}")
+            return 0
+        if not cands:
+            print(f"No free candidates found for: {prompt}")
+            return 0
+        print(f"# Candidates for: {prompt}\n"
+              f"# Reply 'source install <n>' style approval to the agent; nothing is installed now.\n")
+        for i, c in enumerate(cands, 1):
+            screen = c.get("screen") or "unscreened"
+            installs = c.get("installs")
+            installs = f"{installs:,}" if isinstance(installs, int) else "?"
+            print(f"{i}. [{c['kind']}] {c['name']}  ({c.get('source')}, "
+                  f"{installs} installs, screen={screen})")
+            print(f"   id: {c['identifier']}")
+            print(f"   {(c.get('description') or '')[:160]}")
+        return 0
 
     if args.record:
         record(args.record)

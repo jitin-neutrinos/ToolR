@@ -246,6 +246,53 @@ def t_user_n():
     assert pipeline.user_n("top 0 tools") == 1, "clamp to >=1"
 
 
+def t_gaptrack():
+    """Repeat-gap tracking: oracle-gated promotion, install lockout, temp state."""
+    import tempfile
+    import gaptrack
+    with tempfile.TemporaryDirectory() as tmp:
+        gaptrack.STATE = Path(tmp) / "gaps.json"
+        k1 = gaptrack._intent_key("How do I crop the background out of a photo?")
+        k2 = gaptrack._intent_key("photo background crop how")
+        assert k1 == k2, "same intent regardless of phrasing/order"
+        assert gaptrack._intent_key("the a an and") == "", "stopwords only"
+        cfg = {"sourcing": {"auto_threshold": 3, "auto_skills_only": True}}
+        e = gaptrack.record_gap("crop background from photo", cfg)
+        assert e["count"] == 1
+        gaptrack.record_gap("crop background from photo", cfg)
+        e = gaptrack.record_gap("please crop the background out of my photo", cfg)
+        assert e["count"] == 3
+        # not eligible yet: oracle has not judged (served None = never auto)
+        assert not gaptrack.auto_eligible(e, cfg), "served=None must never auto"
+        e["served"] = False
+        assert not gaptrack.auto_eligible(e, cfg), "served=False (a local pick serves)"
+        e["served"] = True
+        assert gaptrack.auto_eligible(e, cfg), "oracle-confirmed gap + 3 repeats"
+        # persist like auto_install does (verdict written back to the state file)
+        fresh = gaptrack.load(); fresh[k1]["served"] = True; gaptrack._save(fresh)
+        assert gaptrack.eligible_key_for_prompt("crop photo background", cfg)
+        # installed lockout
+        gaptrack.mark_installed(k1, "some-skill")
+        assert not gaptrack.auto_eligible(gaptrack.load()[k1], cfg), "installed = no re-auto"
+        # mcp-style tier off -> never auto
+        cfg_off = {"sourcing": {"auto_threshold": 1, "auto_skills_only": False}}
+        e2 = gaptrack.record_gap("another thing entirely", cfg_off)
+        e2["served"] = False
+        assert not gaptrack.auto_eligible(e2, cfg_off), "auto_skills_only=false disables tier"
+        gaptrack.STATE = None  # restore real state path
+
+
+def t_source_free():
+    """Free/paid heuristics + installs parsing (pure functions)."""
+    import source as _src
+    assert _src._free("Convert images to webp. Fast and local.")
+    assert not _src._free("Requires an API key from vendor.com")
+    assert not _src._free("14-day free trial then $10 per month")
+    assert not _src._free("Upgrade to Pro plan for batch mode")
+    assert _src._installs("Indexed by skills.sh from x/y · 10,059 installs") == 10059
+    assert _src._installs("no numbers here") is None
+
+
 def t_laya_gate():
     """gate_accept beats chance, not a fixed margin: calibrated on 2026-09-26
     probe data where correct picks over 5 similar candidates scored p1

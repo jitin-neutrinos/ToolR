@@ -1057,6 +1057,7 @@ DEFAULT_CONFIG = {
     "stale_hours": 24,
     "enabled": True,
     "compact_repeats": True,
+    "sourcing": {"auto_threshold": 3, "auto_skills_only": True},
     # MCP servers ship no description in any config format, so give the common
     # ones intent words. Add your own in ~/.tool-router/config.json.
     "mcp_hints": {
