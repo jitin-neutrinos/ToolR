@@ -125,6 +125,28 @@ prompt hook put it there), use it — do not run the command again.
 
 Rebuild the index after installing or removing skills:
 `~/.tool-router/index --cwd .`
+
+**Pipeline v2.1 (2026-09-26).** Every message on every wired harness is
+intercepted: route → prompt-engineer rewrite (gemini-flash, fail-open) →
+re-route → merge + coverage, then Laya rerank + semantic lane fuse. Cards carry
+`[semantic]`/`[laya]` provenance tags; a `top N tools` phrase in the request
+overrides the default 10; `--no-rewrite` skips the LLM stage. Failures degrade,
+never block. Breakers: `~/.tool-router/breaker-*.json` (delete to reset).
+
+**Sourcing (v2.1).** When no local capability serves the need, search the free
+registries before giving up:
+
+```bash
+~/.tool-router/route --source "<the capability you need>"
+```
+
+Present the screened candidate table to the user and install only on their
+explicit approval (MCPs, plugins and commands are NEVER auto-installed); then
+reindex and let the fleet sync mirror it. The router may auto-install a SKILL
+only after the same need repeats 3+ times, the judge confirms no local
+capability serves it, and the candidate is free + injection-screened + 1K+
+installs — such picks are marked **Auto-sourced** on later cards: tell the
+user, and `~/.tool-router/route --source-remove <skill>` undoes one.
 {end}"""
 
 
