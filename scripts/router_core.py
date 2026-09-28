@@ -13,7 +13,7 @@ import re
 import time
 from pathlib import Path
 
-INDEX_VERSION = 3
+INDEX_VERSION = 4
 
 # ---------------------------------------------------------------- frontmatter
 
@@ -313,13 +313,76 @@ def discover_mcp(cwd: Path) -> list[dict]:
                 {
                     "kind": "mcp",
                     "name": n,
-                    "desc": hint[:200],
+                    "desc": _fleet_note(n) or hint[:200],
                     "extra": str(path),
                     "path": str(path),
                     "harness": "any",
                     "scope": "mcp",
                 }
             )
+    return items
+
+
+_FLEET_INVENTORY = Path("~/Work/infra/agent-fleet/catalog/inventory.json").expanduser()
+_fleet_cache: dict[str, str] | None = None
+_fleet_mtime: float | None = None
+
+
+def _fleet_note(name: str) -> str:
+    """Description for an MCP from the fleet catalog's inventory.json.
+
+    MCP config formats ship no description, so config hints (launch commands)
+    are useless for scoring; the fleet catalog carries real notes per server.
+    Returns '' when the catalog is absent/stale — the config hint stands in."""
+    global _fleet_cache, _fleet_mtime
+    try:
+        mtime = _FLEET_INVENTORY.stat().st_mtime
+        if _fleet_cache is None or mtime != _fleet_mtime:
+            import json
+            data = json.loads(_FLEET_INVENTORY.read_text(encoding="utf-8"))
+            _fleet_cache = {
+                str(m.get("name", "")).lower(): str(m.get("notes") or m.get("description") or "")
+                for m in (data.get("mcps", []) + data.get("tools", []) + data.get("plugins", []))
+            }
+            _fleet_mtime = mtime
+        return _fleet_cache.get(name.lower(), "")
+    except Exception:
+        return ""
+
+
+def discover_fleet_assets() -> list[dict]:
+    """Fleet-store tools and plugins as first-class index items.
+
+    Sourced from the fleet catalog's inventory.json (rebuilt by the daily
+    agent-fleet-catalog timer), so anything added to the store shows up in the
+    router on the next index refresh with no manual step. Only dedupes; every
+    catalog entry is a capability worth routing (install/update scripts are
+    legit tools — "refresh a machine from the fleet store" should route)."""
+    items, seen = [], set()
+    try:
+        import json as _json
+        data = _json.loads(_FLEET_INVENTORY.read_text(encoding="utf-8"))
+    except Exception:
+        return items
+    for bucket, kind in (("tools", "fleet-tool"), ("plugins", "fleet-plugin")):
+        for t in data.get(bucket, []):
+            name = str(t.get("name") or t.get("slug") or "").strip()
+            desc = str(t.get("description") or t.get("summary") or "").strip()
+            if not name or not desc:
+                continue
+            key = (kind, name.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append({
+                "kind": kind,
+                "name": name,
+                "desc": desc,
+                "extra": str(t.get("kind", bucket[:-1])),
+                "path": str(t.get("path") or t.get("page") or ""),
+                "harness": "fleet",
+                "scope": "agent-fleet",
+            })
     return items
 
 
@@ -330,6 +393,7 @@ def build_index(cwd: Path) -> dict:
         + discover_md_assets(cwd, AGENT_ROOTS, "agent")
         + discover_md_assets(cwd, COMMAND_ROOTS, "command")
         + discover_mcp(cwd)
+        + discover_fleet_assets()
     )
     for it in items:
         it["tokens"] = tokenize(" ".join((it["name"], it["desc"], it["extra"])))
@@ -742,10 +806,13 @@ KIND_LABEL = {
     "agent": "Subagent",
     "command": "Command",
     "mcp": "MCP",
+    "fleet-tool": "Fleet tool",
+    "fleet-plugin": "Fleet plugin",
 }
 
 KIND_LABEL_PLAIN = {"skill": "skill", "plugin-skill": "skill", "agent": "subagent",
-                    "command": "command", "mcp": "MCP"}
+                    "command": "command", "mcp": "MCP", "fleet-tool": "fleet tool",
+                    "fleet-plugin": "fleet plugin"}
 
 KIND_LABEL_COVER = KIND_LABEL_PLAIN  # coverage lines reuse the plain labels
 
@@ -1054,6 +1121,7 @@ DEFAULT_CONFIG = {
     "max_skills": 4,
     "min_score": 0.28,   # relative confidence, 0..~1.4 (see score())
     "tail_ratio": 0.55,
+    "kind_quota": 2,     # per-kind slots reserved in the top-N (0 = old leftover behavior)
     "stale_hours": 24,
     "enabled": True,
     "compact_repeats": True,

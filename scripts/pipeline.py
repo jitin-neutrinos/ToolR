@@ -65,18 +65,42 @@ def _route_once(prompt: str, index: dict, stack: list[str], cfg: dict,
 
 
 def _top_combined(ranked: list[dict], cfg: dict, n: int) -> list[dict]:
-    """Top-N across all capability kinds: skills get priority of place, MCPs/
-    agents/commands fill remaining slots, so the card names a combined toolkit
-    instead of skills-only."""
+    """Top-N across all capability kinds with a per-kind quota, so MCPs/
+    agents/commands get guaranteed slots instead of skill leftovers."""
     picks = [r for r in ranked if r.get("score", 0) >= float(
         cfg.get("min_score", rc.DEFAULT_CONFIG["min_score"]))]
     if picks:
         cut = picks[0]["score"] * float(cfg.get("tail_ratio", rc.DEFAULT_CONFIG["tail_ratio"]))
-        picks = [r for r in picks if r["score"] >= cut]
+    else:
+        cut = 0.0
     skills, others = [], []
     for r in picks:
-        (skills if r["kind"] in ("skill", "plugin-skill") else others).append(r)
-    return (skills[:n] + others[:max(0, n - len(skills[:n]))])[:n]
+        # tail cut applies to skills only: a dominant skill must not starve
+        # other kinds out of their quota slots
+        (skills if r["kind"] in ("skill", "plugin-skill") and r["score"] >= cut
+         else others).append(r)
+    out, seen_keys = [], set()
+    quota = max(0, int(cfg.get("kind_quota", rc.DEFAULT_CONFIG["kind_quota"])))
+    if quota:                              # reserve best slots per non-skill kind first
+        per_kind: dict[str, list[dict]] = {}
+        for r in others:                   # already in fused-score order
+            per_kind.setdefault(r["kind"], []).append(r)
+        for rs in per_kind.values():
+            for r in rs[:quota]:
+                if len(out) >= n:
+                    break
+                out.append(r)
+                seen_keys.add((r["kind"], r["name"]))
+            if len(out) >= n:
+                break
+    for r in skills + others:              # fill the rest, best score first
+        if len(out) >= n:
+            break
+        key = (r["kind"], r["name"])
+        if key not in seen_keys:
+            out.append(r)
+            seen_keys.add(key)
+    return out[:n]
 
 
 def _route_ctx(picks: list[dict]) -> str:
@@ -89,7 +113,8 @@ def _coverage(picks: list[dict]) -> list[str]:
     kinds = {}
     for r in picks:
         kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
-    order = ["skill", "plugin-skill", "mcp", "agent", "command"]
+    order = ["skill", "plugin-skill", "mcp", "agent", "command",
+             "fleet-tool", "fleet-plugin"]
     out = []
     for k in order:
         if kinds.get(k):

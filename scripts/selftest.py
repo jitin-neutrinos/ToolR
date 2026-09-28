@@ -347,6 +347,56 @@ def t_live_speed():
     print(f"  ({n} items indexed, {ms:.0f}ms per route)")
 
 
+def t_mcp_reaches_card_on_intent_query():
+    """Bug fix regression: an MCP must surface on an intent query with no name
+    mention — fleet descriptions + hints + kind quota, end to end."""
+    import pipeline
+    cfg = rc.load_config()
+    index = rc.load_index() or rc.build_index(Path.cwd())
+    ranked = rc.score(index, "query the codebase architecture knowledge graph",
+                      [], rc.load_learned(), cfg.get("mcp_hints"))
+    mcps = [r for r in ranked if r["kind"] == "mcp" and r.get("score", 0) > 0]
+    assert mcps, "no MCP scored >0 on an intent query — descriptions/hints broken"
+    graphify = [r for r in mcps if r["name"] == "graphify"]
+    assert graphify and graphify[0]["score"] >= cfg["min_score"], \
+        f"graphify MCP below min_score: {[r.get('score') for r in graphify]}"
+    picks = pipeline._top_combined(ranked, cfg, 10)
+    kinds = {r["kind"] for r in picks}
+    assert "mcp" in kinds, f"no MCP in top-10 card picks: kinds={kinds}"
+
+
+def t_kind_quota_reserves_slots():
+    """kind_quota: best MCP/agent/command get slots even when skills dominate."""
+    import pipeline
+    ranked = [{"kind": "skill", "name": f"s{i}", "score": 1.0 - i * 0.01}
+              for i in range(20)]
+    ranked += [{"kind": "mcp", "name": "best-mcp", "score": 0.35},
+               {"kind": "mcp", "name": "second-mcp", "score": 0.30},
+               {"kind": "mcp", "name": "third-mcp", "score": 0.29},
+               {"kind": "agent", "name": "best-agent", "score": 0.31},
+               {"kind": "command", "name": "best-cmd", "score": 0.281}]
+    picks = pipeline._top_combined(ranked, {"min_score": 0.28, "tail_ratio": 0.55,
+                                            "kind_quota": 2}, 10)
+    kinds = {}
+    for r in picks:
+        kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
+    assert kinds.get("mcp", 0) == 2, f"quota-2 should land exactly 2 MCPs: {kinds}"
+    assert kinds.get("agent", 0) == 1 and kinds.get("command", 0) == 1, kinds
+    names = {r["name"] for r in picks}
+    assert {"best-mcp", "second-mcp", "best-agent", "best-cmd"} <= names, names
+    # skills still dominate by count
+    assert kinds.get("skill", 0) >= 5, kinds
+
+
+def t_fleet_assets_indexed():
+    """Fleet tools/plugins land in the index as first-class items."""
+    items = rc.discover_fleet_assets()
+    assert items, "no fleet assets discovered — inventory.json missing or empty?"
+    kinds = {it["kind"] for it in items}
+    assert "fleet-tool" in kinds or "fleet-plugin" in kinds, kinds
+    assert all(i["desc"] for i in items), "fleet items must carry real descriptions"
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("t_")]
     failed = 0
