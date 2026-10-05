@@ -159,28 +159,22 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     ranked1 = _route_once(prompt, index, stack, cfg, dense_path, n)
     picks1 = _top_combined(ranked1, cfg, n)
 
-    # Stage 2 — prompt engineer (fail-open; skipped with rewrite=False)
+    # Stage 2 — PROMPT REWRITER: REMOVED (owner decision 2026-10-05).
+    #
+    # The hook now routes the user's own words and nothing else. The rewriter
+    # was the only reason the hook spent real time: it made a network call on
+    # every single message, through a free tier that (measured 2026-10-05)
+    # returns HTTP 200 with an EMPTY body roughly 1 call in 5, and whose
+    # "fast" models queue behind 10 s of work. Even with a deadline, a breaker
+    # and a retry, the median route was 2.5-5.5 s with 15-18 s outliers, and a
+    # 5 s hook budget could not be held.
+    #
+    # What the rewriter added was a "Use:" line naming the picks. The card
+    # ALREADY does that, better and for free: the pick list is the same list,
+    # with scores and match reasons, and it ships whether or not any model
+    # answered. rewriter.py stays on disk (unused, importable, still tested) so
+    # nothing measured there is lost if it is ever wanted back.
     rewritten, provider = None, None
-    # The rewrite is the most expensive single stage and the least valuable when
-    # the budget is already spent: a card without it is still correct. Skip when
-    # the remaining budget cannot cover a call plus the re-route.
-    if rewrite and budget_left() > float(cfg.get("rewrite_min_budget_ms", 2600)):
-        try:
-            import rewriter
-            # Pass the full first-pass pick list so the rewrite can name the
-            # capabilities in a Use: line — the downstream agent is then told
-            # what to load instead of re-deriving it from the card.
-            out = rewriter.rewrite(prompt, _route_ctx(picks1), cfg,
-                                   picks=[{"name": r["name"], "kind": r["kind"],
-                                           "desc": r.get("desc", "")}
-                                          for r in picks1[:8]])
-            if out:
-                rewritten = out["prompt"]
-                provider = out.get("model") or out.get("provider")
-                if out.get("session_model") and out["session_model"] != provider:
-                    provider = f"{provider} (session: {out['session_model']})"
-        except Exception:
-            pass
 
     # Stage 3 — re-route the rewritten prompt. The rerank runs ONCE per route:
     # stage 1 already applied it to the original prompt, and a second 4 s CPU

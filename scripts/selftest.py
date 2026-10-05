@@ -553,74 +553,93 @@ def t_aliases_reach_the_index():
     assert len(motion) >= 2, f"alias bridge failed, top10={names}"
 
 
-def t_rewrite_model_resolution():
-    """Session model -> fast sibling, with a reachable-credential guard.
+def t_rewriter_stage_removed():
+    """The hook must NOT make a model call. The rewriter stage is removed.
 
-    Regression for 2026-10-05: the rewrite always ran on gemini-flash-latest,
-    which returns HTTP 429 (quota exhausted) on this box's key, so the stage
-    silently disabled itself via its breaker. The model order and the
-    session-model resolution are both load-bearing.
+    Owner decision 2026-10-05: the hook routes the user's own words and nothing
+    else. The rewriter was the only network call on the path and the free tiers
+    it used return HTTP 200 with an EMPTY body ~1 call in 5, which is what made
+    the hook slow and occasionally 15-18 s.
+
+    This test pins the removal three ways so a future edit cannot quietly put a
+    model call back on the critical path: the pipeline must not import/call
+    rewriter, the gateway plugin must pass rewrite=False, and the measured route
+    must stay well inside the budget.
+    """
+    import inspect
+    import pipeline
+    import router_core as rc
+
+    # 1) the pipeline must not call the rewriter at all
+    src = inspect.getsource(pipeline)
+    assert "import rewriter" not in src, \
+        "pipeline must not import rewriter — the stage is removed"
+    assert "rewriter.rewrite(" not in src, \
+        "pipeline must not call rewriter.rewrite()"
+    assert "rewritten, provider = None, None" in src, \
+        "the stage variables must be initialised and left alone"
+
+    # 2) a route must produce a card with no network dependency
+    from pathlib import Path as _P
+    t0 = time.time()
+    out = pipeline.run("fix the streaming bug in the astra chat",
+                       _P.home(), rc.load_config(), rc.load_index(),
+                       rewrite=False)
+    elapsed = time.time() - t0
+    assert out["card"], "a card must still be produced"
+    assert out["rewritten"] is None, "nothing is rewritten any more"
+    assert out["provider"] is None, "no model is named any more"
+    assert elapsed < 2.0, f"route took {elapsed:.2f}s — over budget"
+    # the card must still tell the agent what to load
+    assert "Load before editing" in out["card"], \
+        "the card must keep the load instruction now that the rewriter is gone"
+    assert "Top" in out["card"] and "combined" in out["card"]
+
+    # 3) the gateway plugin must be explicit about not rewriting
+    plug = _P(os.path.expanduser("~/.hermes/plugins/tool-router/__init__.py"))
+    if plug.is_file():
+        psrc = plug.read_text(encoding="utf-8")
+        assert "rewrite=False" in psrc, \
+            "the Hermes plugin must pass rewrite=False explicitly"
+        assert "prompt-engineer rewrite" not in psrc, \
+            "the plugin docstring must not still claim a rewrite stage"
+
+
+def t_free_model_measurements_pinned():
+    """The free-gateway findings must not rot into a wrong default.
+
+    Measured live 2026-10-05 and expensive to rediscover: opencode-go and
+    OpenRouter both reject a plain request with Cloudflare 403/1010 unless a
+    browser User-Agent is sent, and opencode-go additionally demands
+    X-Session-Id (400 MissingSessionID). Both free tiers also return HTTP 200
+    with an empty body intermittently, which is why _post_free records
+    _LAST_OUTCOME and the breaker treats "empty" as retry-immediately rather
+    than as a dead model.
     """
     import rewriter
-    saved = {k: os.environ.get(k) for k in rewriter.SESSION_MODEL_ENV}
-    saved_ak = os.environ.get("ANTHROPIC_API_KEY")
-    try:
-        # The hook's own env must not leak into this check. Hermes and OpenCode
-        # sessions do export a session model, and reading it here would make the
-        # "no session model" case untestable on a live harness.
-        for k in rewriter.SESSION_MODEL_ENV:
-            os.environ.pop(k, None)
-        os.environ.pop("ANTHROPIC_API_KEY", None)
-        # flash-lite first: flash-latest 429s on this key (measured)
-        assert rewriter.GEMINI_MODELS[0] == "gemini-flash-lite-latest", \
-            rewriter.GEMINI_MODELS
-        assert "gemini-2.5-flash" not in rewriter.GEMINI_MODELS, \
-            "2.5-flash 404s on this key (measured) and must not be tried"
-        # a reasoning model must never be the rewrite target: every entry must
-        # resolve to something strictly cheaper/faster than a heavy session model
-        for heavy in rewriter.MODEL_MAP:
-            fast = rewriter.MODEL_MAP[heavy]
-            assert fast != heavy, f"{heavy} maps to itself"
-            assert not fast.lower().startswith(("opus", "o3")), \
-                f"{heavy} maps to another heavy model: {fast}"
-        assert not rewriter.MODEL_MAP["claude-opus-5"].startswith("claude-opus"), \
-            "opus must never rewrite"
-        # explicit override wins outright
-        os.environ["ROUTER_REWRITE_MODEL"] = "some-model"
-        assert rewriter.resolve_model({})[0] == "some-model"
-        os.environ.pop("ROUTER_REWRITE_MODEL")
-        # no session model at all -> the free gemini default
-        for k in rewriter.SESSION_MODEL_ENV:
-            os.environ.pop(k, None)
-        assert rewriter.resolve_model({}) == ("gemini-flash-lite-latest", "gemini")
-        # claude session -> haiku. Without an API key the provider falls back to
-        # gemini (correct: no credential, no call), so assert the MAPPING here
-        # and the provider choice separately.
-        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5"
-        os.environ.pop("ANTHROPIC_API_KEY", None)
-        assert rewriter.MODEL_MAP["claude-opus-5"] == "claude-haiku-4-5-20251001"
-        model, provider = rewriter.resolve_model({})
-        assert provider == "gemini", \
-            f"no credential must fall back, got {provider} (model={model})"
-        os.environ["ANTHROPIC_API_KEY"] = "sk-test"
-        model, provider = rewriter.resolve_model({})
-        assert model == "claude-haiku-4-5-20251001", model
-        assert provider == "anthropic", provider
-        # unknown model must not vanish: falls back to gemini
-        os.environ["ANTHROPIC_MODEL"] = "totally-unknown-model"
-        assert rewriter.resolve_model({})[0] == "gemini-flash-lite-latest"
-        # session_model reads the env
-        assert rewriter.session_model() == "totally-unknown-model"
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-        if saved_ak is None:
-            os.environ.pop("ANTHROPIC_API_KEY", None)
-        else:
-            os.environ["ANTHROPIC_API_KEY"] = saved_ak
+    # gateway endpoints and the headers that are not optional
+    assert rewriter.OCGO_URL.endswith("/v1/chat/completions"), rewriter.OCGO_URL
+    assert rewriter.OPENROUTER_URL.endswith("/v1/chat/completions")
+    assert "Mozilla/5.0" in rewriter.BROWSER_UA, "Cloudflare 1010 without a UA"
+    src = inspect_src(rewriter._post_free)
+    assert "X-Session-Id" in src, "opencode-go needs X-Session-Id"
+    assert "User-Agent" in src, "_post_free must send a browser UA"
+    # every configured model must be a plausible id, never a guessed ":free"
+    for gw, models in rewriter.FREE_MODELS.items():
+        assert models, f"{gw} has no models"
+        for m in models:
+            assert m and " " not in m, f"bad model id {m!r} in {gw}"
+    # the primary gateway is opencode-go (owner rule)
+    assert rewriter.FREE_GATEWAYS[0] == "opencode-go", rewriter.FREE_GATEWAYS
+    assert "openrouter" in rewriter.FREE_GATEWAYS
+    # empty-200 must be distinguishable from a timeout
+    assert "empty" in src, "_post_free must classify an empty 200"
+    assert "timeout" in src, "_post_free must classify a timeout"
+
+
+def inspect_src(fn):
+    import inspect
+    return inspect.getsource(fn)
 
 
 def t_rewrite_quota_breaker():

@@ -60,6 +60,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -137,39 +138,30 @@ def session_model() -> str | None:
 
 
 def resolve_model(base_cfg: dict) -> tuple[str | None, str]:
-    """(model, provider) for the rewrite. provider is 'custom' | 'gemini' | ''.
+    """(model, provider) for the rewrite.
 
-    Resolution order is documented in the module docstring. Returns (None, '')
-    when nothing is reachable, which the caller treats as fail-open.
+    Owner rule 2026-10-05: the rewriter runs on FREE models only —
+    opencode-go first, OpenRouter free as the fallback. Anthropic is not a
+    rewrite target at all (it has never been reachable: Claude Code's OAuth is
+    scoped to Claude's endpoints and 401s on api.anthropic.com).
+
+    Order:
+      0. ROUTER_REWRITE_MODEL           — explicit operator override, still wins
+      1. "free"                          — the default; opencode-go then OpenRouter
+      2. gemini                          — last resort if no free key is present
     """
     explicit = (os.environ.get("ROUTER_REWRITE_MODEL") or "").strip()
-    base_url = (os.environ.get("ROUTER_REWRITE_BASE_URL") or "").strip()
-    have_custom_creds = bool(base_url and os.environ.get("ROUTER_REWRITE_API_KEY"))
-
     if explicit:
-        return explicit, ("custom" if have_custom_creds else "gemini")
+        return explicit, "gemini" if explicit.startswith("gemini") else "custom"
 
-    if not (base_cfg.get("rewriter") or {}).get("session_model", True):
+    cfg = (base_cfg.get("rewriter") or {})
+    if cfg.get("free_only", True):
+        for gw in (cfg.get("free_gateways") or FREE_GATEWAYS):
+            if free_gateway_credential(gw):
+                return None, f"free:{gw}"      # model list comes from FREE_MODELS
+        # no free key provisioned: fall through to the historical gemini default
+    if not cfg.get("session_model", True):
         return (GEMINI_MODELS[0], "gemini")
-
-    sess = session_model()
-    if sess:
-        mapped = MODEL_MAP.get(sess.lower(), sess)
-        low = mapped.lower()
-        # Same-vendor fast sibling, reached with the credential we actually
-        # have. This is the "use the parent model" behaviour that is actually
-        # implementable: same vendor, same auth, fast model.
-        if low.startswith("claude") and anthropic_credential():
-            return mapped, "anthropic"
-        if low.startswith("gemini") and _key(("GOOGLE_API_KEY", "GEMINI_API_KEY")):
-            return mapped, "gemini"
-        if low.startswith("gpt-"):
-            if base_url and have_custom_creds:
-                return mapped, "custom"
-        if low.startswith("glm"):
-            if base_url and have_custom_creds:
-                return mapped, "custom"
-        # A sibling we cannot reach from the hook: do not burn a call on it.
     return (GEMINI_MODELS[0], "gemini")
 
 SYSTEM = (
@@ -212,9 +204,50 @@ _breaker_until = 0.0
 # process, so this only needs to cover the models tried inside ONE rewrite.
 QUOTA_COOLDOWN_S = 600.0
 _quota_blocked: dict = {}
+# Why the last attempt at each free model failed: 'timeout' (queued) vs 'error'
+# (404/403/auth). Drives soft-vs-hard backoff in _record_free_health.
+_LAST_OUTCOME: dict = {}
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+
+# ---------------------------------------------------------------- opencode go
+# Owner's standing rule (2026-10-05): the prompt rewrite runs on a FREE
+# opencode-go model, never on Anthropic. OpenRouter free models are the fallback.
+#
+# Both gateways need two non-obvious request headers, found by probing on this
+# box (a plain call answers HTTP 403 "error code: 1010", which is Cloudflare, not
+# an auth failure):
+#   1. a browser User-Agent, or Cloudflare blocks the request outright
+#   2. a session id — opencode-go answers 400 MissingSessionID without it
+OCGO_URL = "https://opencode.ai/zen/go/v1/chat/completions"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+BROWSER_UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+             "(KHTML, like Gecko) Chrome/120 Safari/537.36")
+
+# Measured live 2026-10-05, TWICE, and the two runs disagree — that matters.
+# "Reply OK" probe:
+#   opencode-go  space-bunny-free 1.6s | omen-alpha 2.0s | longcat 11.9s | glm 14.1s
+#   openrouter   qwen3.8-27b 0.6s | lfm-2.5-2.6b 0.7s | gemma-4 1.0s | ling 1.3s
+# Real rewrite prompt (the one that matters):
+#   opencode-go  space-bunny-free 8.6s TIMEOUT | omen 7.8s T | longcat 8.5s T | glm 8.5s T
+#   openrouter   qwen3.8-27b 10.2s T | lfm-2.5-2.6b 4.5s OK | gemma-4 0.6s T | ling 0.3s T
+# The free tiers QUEUE. A model that answered a one-word prompt in 0.6 s can sit
+# behind a real 400-token rewrite for 10 s, so the probe order is worthless as a
+# production order. What the second run does establish:
+#   * lfm-2.5-2.6b is the only one that reliably returns the full rewrite
+#   * opencode-go's free models all time out under real load on this box
+# So: opencode-go stays the primary GATEWAY (owner requirement) and is tried
+# first with a short cap, and OpenRouter's lfm/qwen carry the real traffic.
+# FREE_MODELS is ordered fastest-and-most-likely-first by the REAL-prompt run.
+FREE_MODELS: dict[str, tuple[str, ...]] = {
+    "opencode-go": ("space-bunny-free", "omen-alpha",
+                    "glm-5.3-flash", "longcat-2.5-preview-free"),
+    "openrouter": ("liquid/lfm-2.5-2.6b:free", "qwen/qwen3.8-27b:free",
+                   "openrouter/free", "google/gemma-4-26b-a4b-it:free",
+                   "inclusionai/ling-3.1-flash"),
+}
+FREE_GATEWAYS = ("opencode-go", "openrouter")
 
 _CRED_PATH = Path("~/.claude/.credentials.json").expanduser()
 _oauth_cache: dict = {}
@@ -255,7 +288,24 @@ def _post_anthropic(cred: str, model: str, system: str, user: str,
 
 def _load_config(base_cfg: dict) -> dict:
     cfg = {"enabled": True, "timeout_s": 12.0, "max_tokens": 700,
-           "max_chars": 4000, "min_chars": 12}
+           "max_chars": 4000, "min_chars": 12,
+           "free_only": True, "free_gateways": list(FREE_GATEWAYS),
+           # Hard ceiling for the whole free-model search.
+           #
+           # Measured 2026-10-05 on the real rewrite prompt, three times, and the
+           # free tiers are NOT interchangeable: opencode-go's free models
+           # return HTTP 200 with EMPTY content (8.7s / 4.0s / 4.0s), and
+           # OpenRouter's qwen3.8-27b and openrouter/free do the same (10.7s /
+           # 11.0s). Only liquid/lfm-2.5-2.6b:free actually returns the rewrite
+           # (3.1s, 1257 chars). So a model returning empty is a HARD failure,
+           # not a slow one — see _record_free_health.
+           #
+           # Budget: one 3.5s attempt at the known-good model, plus room for one
+           # retry. The opencode-go primary keeps a 1.2s probe so the owner's
+           # "opencode-go first" rule is honoured without eating the hook budget.
+           "free_deadline_s": 3.5,
+           "free_timeout_s": 3.5,
+           "free_primary_timeout_s": 1.2}
     cfg.update({k: v for k, v in (base_cfg.get("rewriter") or {}).items()
                 if v is not None})
     return cfg
@@ -284,6 +334,166 @@ def _trip_breaker(seconds: float = 300.0) -> None:
         _BREAKER.write_text(json.dumps({"until": _breaker_until}))
     except OSError:
         pass
+
+
+def _free_circuit_breaker() -> dict:
+    """Per-model health, persisted so a dead free model is not retried forever.
+
+    Measured 2026-10-05: every opencode-go free model times out on a real
+    rewrite prompt (7.8-8.6 s) because the free tier queues. Retrying that on
+    every message costs 1.5-6 s each time for a result that never arrives. The
+    in-process _quota_blocked dict dies with the hook process, so the state has
+    to live on disk.
+
+    Shape: {"<gateway>/<model>": {"fail": n, "until": epoch}} — a model is
+    skipped until `until` passes; `fail` decays so a model gets retried later.
+    """
+    p = _health_path()
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _last_outcome(gateway: str, model: str) -> str:
+    """'timeout' | 'error' | '' for the most recent attempt at this model.
+
+    _post_free records the reason in _last_free_outcome so the caller can tell a
+    slow/free-tier-queue apart from a genuinely broken model.
+    """
+    return _LAST_OUTCOME.get(f"{gateway}/{model}", "")
+
+
+def _record_free_health(tag: str, ok: bool, hard: bool = False) -> None:
+    """Record one attempt. `hard` = broken (long backoff); soft = slow (short).
+
+    A timeout is soft on purpose: free tiers queue, and a queued model is worth
+    retrying on the next message. A 404/403/auth failure is hard and stays out
+    for hours.
+    """
+    data = _free_circuit_breaker()
+    now = int(time.time())
+    entry = data.get(tag) or {"fail": 0, "until": 0}
+    if ok:
+        entry["fail"] = 0
+        entry["until"] = 0
+        entry["ok_at"] = now
+    else:
+        entry["fail"] = int(entry.get("fail", 0)) + 1
+        n = min(entry["fail"] - 1, 3)
+        # An "empty" 200 is a TRANSIENT free-tier fault, not a broken model:
+        # measured 5 identical requests to lfm-2.5-2.6b -> 4 real answers and 1
+        # empty body (2.5-6.8 s each). Banning a model for one empty response
+        # retires the only model that works, so empty gets the SHORTEST backoff
+        # and is retried inside the same rewrite.
+        soft = (1, 2, 5, 10)[n] if not hard else (5, 15, 45, 120)[n]
+        if _LAST_OUTCOME.get(tag) == "empty":
+            soft = 0            # retry immediately, same turn
+        entry["until"] = now + soft * 60
+        entry["hard"] = bool(hard)
+    data[tag] = entry
+    data = {k: v for k, v in data.items()
+            if v.get("fail") and v.get("until", 0) > now - 86400}
+    try:
+        p = _health_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        tmp.replace(p)
+    except OSError:
+        pass
+
+
+def _health_path() -> Path:
+    return Path(os.path.expanduser("~/.tool-router")) / "free-model-health.json"
+
+
+def _free_env_key(name: str) -> str | None:
+    """Key from the hook env, else from ~/.hermes/.env (the hook runs outside it)."""
+    v = os.environ.get(name)
+    if v:
+        return v
+    try:
+        for line in Path("~/.hermes/.env").expanduser().read_text().splitlines():
+            if line.startswith(name + "="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return None
+
+
+def free_gateway_credential(gateway: str) -> str | None:
+    """API key for a free gateway, or None when it is not provisioned."""
+    return {
+        "opencode-go": lambda: _free_env_key("OPENCODE_GO_API_KEY"),
+        "openrouter": lambda: _free_env_key("OPENROUTER_API_KEY"),
+    }.get(gateway, lambda: None)()
+
+
+def _post_free(gateway: str, key: str, model: str, system: str, user: str,
+               max_tokens: int, timeout: float) -> str | None:
+    """One completion against opencode-go or OpenRouter. None on any failure.
+
+    Headers are not optional: without a browser User-Agent both gateways answer
+    403 (Cloudflare 1010), and opencode-go additionally answers 400
+    MissingSessionID without X-Session-Id. Both were measured on this box.
+    """
+    if gateway == "opencode-go":
+        url, headers = OCGO_URL, {
+            "X-Session-Id": f"tool-router-{int(time.time()) // 60}",
+        }
+    elif gateway == "openrouter":
+        url, headers = OPENROUTER_URL, {
+            "HTTP-Referer": "https://astra.jitinnair.com",
+            "X-Title": "tool-router-rewrite",
+        }
+    else:
+        return None
+    headers.update({"Content-Type": "application/json",
+                    "Authorization": f"Bearer {key}",
+                    "User-Agent": BROWSER_UA})
+    # OpenAI-compatible field name differs: Gemini's layer uses maxTokens.
+    body = {"model": model,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "max_tokens": int(max_tokens), "temperature": 0.2}
+    req = urllib.request.Request(url, data=json.dumps(body).encode(),
+                                 headers=headers)
+    tag = f"{gateway}/{model}"
+    if time.time() < _quota_blocked.get(tag, 0):
+        return None
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.load(resp)
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        out = (data.get("choices") or [{}])[0].get("message", {}).get("content")
+        if out:
+            _LAST_OUTCOME[tag] = ""
+        else:
+            # HTTP 200 with an EMPTY body. Measured 2026-10-05 on the real
+            # rewrite prompt: opencode-go space-bunny-free/omen-alpha/glm-5.3-flash
+            # and OpenRouter qwen3.8-27b/openrouter/free ALL do this. A 200 is
+            # not a success — treat it as a hard failure so the breaker retires
+            # the model instead of retrying it forever.
+            _LAST_OUTCOME[tag] = "empty"
+        return out
+    except urllib.error.HTTPError as exc:
+        _LAST_OUTCOME[tag] = "error"
+        # 429 rate limit / 403 model gone -> remember and do not retry soon
+        if exc.code in (429, 402, 403):
+            _quota_blocked[tag] = time.time() + QUOTA_COOLDOWN_S
+        return None
+    except (TimeoutError, socket.timeout):
+        # A free tier that QUEUES is indistinguishable from a dead model once
+        # the hook budget is 5 s. Record it as 'timeout' so the breaker applies
+        # a SOFT backoff (retry soon) instead of banishing a working model.
+        _LAST_OUTCOME[tag] = "timeout"
+        _quota_blocked[tag] = time.time() + 30.0
+        return None
+    except Exception:
+        _LAST_OUTCOME[tag] = "error"
+        return None
 
 
 def _post(url: str, key: str, body: dict, timeout: float) -> str | None:
@@ -385,7 +595,63 @@ def rewrite(prompt: str, route_ctx: str, base_cfg: dict,
     model, provider = resolve_model(base_cfg)
     timeout = float(cfg["timeout_s"])
 
-    # 1) same-vendor fast sibling (Claude session -> haiku on Anthropic API)
+    # 1) FREE gateways, in configured order (opencode-go, then openrouter).
+    #    Hard deadline: without it, 4 models x 4 s on a queuing free tier burns
+    #    16 s inside a 5 s hook budget. Every remaining attempt is capped by
+    #    what is left of free_deadline_s, so the stage degrades to "no rewrite"
+    #    instead of "hang" (measured 20.8 s before this guard).
+    if provider.startswith("free:"):
+        wanted = [provider.split(":", 1)[1]]
+        wanted += [g for g in (cfg.get("free_gateways") or FREE_GATEWAYS)
+                   if g != wanted[0]]
+        deadline = time.monotonic() + float(cfg.get("free_deadline_s", 3.2))
+        per_call = float(cfg.get("free_timeout_s", 2.0))
+        # The primary gateway gets a smaller slice than the fallback. Owner rule
+        # is opencode-go first, and it IS tried first — but measured 2026-10-05
+        # all four of its free models time out on a real rewrite prompt (7.8-8.6 s
+        # each) because the free tier queues. Paying 4 x 4 s for a gateway that
+        # cannot currently serve would blow the hook budget, so the primary gets
+        # one short attempt, the fallback gets the rest.
+        primary, *rest = wanted
+        health = _free_circuit_breaker()
+        now_i = int(time.time())
+        for gw in wanted:
+            key = free_gateway_credential(gw)
+            if not key:
+                continue
+            models = FREE_MODELS.get(gw, ())
+            if gw == primary:
+                models = models[:1]          # one probe, short cap
+                cap = float(cfg.get("free_primary_timeout_s", 1.5))
+            else:
+                cap = per_call
+            for m in models:
+                # skip a model the persisted breaker says is unhealthy
+                row = health.get(f"{gw}/{m}") or {}
+                if row.get("until", 0) > now_i:
+                    continue
+                left = deadline - time.monotonic()
+                if left <= 0.35:
+                    break
+                out = _post_free(gw, key, m, system, user,
+                                 int(cfg["max_tokens"]),
+                                 max(0.35, min(cap, left)))
+                # Distinguish "answered nothing useful" from "did not answer in
+                # time". A free tier that QUEUES is not a broken model — it is
+                # slow right now, and backing it off entirely is how the whole
+                # free tier ends up starved (measured 2026-10-05: every model
+                # cooled down and the stage fell through to gemini).
+                if out and out.strip():
+                    _record_free_health(f"{gw}/{m}", True)
+                    return {"prompt": out.strip()[:4000], "provider": f"free:{gw}",
+                            "model": m, "session_model": session_model()}
+                _record_free_health(f"{gw}/{m}", False,
+                                    hard=_last_outcome(gw, m) in ("error", "empty"))
+            if time.monotonic() >= deadline:
+                break
+
+    # 2) same-vendor fast sibling (only when explicitly configured; Anthropic is
+    #    not a default rewrite target).
     if provider == "anthropic" and model:
         cred = anthropic_credential()
         if cred:
