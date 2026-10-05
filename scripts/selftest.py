@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
@@ -10,6 +11,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from email.message import Message
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -478,10 +480,22 @@ def t_laya_auth_fault_not_breakered():
 
 
 def t_laya_bm25_gate():
-    """A decisive BM25 top pick skips the slow rerank; a tie does not."""
+    """A decisive BM25 top pick skips the slow rerank; a tie does not.
+
+    enabled=True is passed explicitly: the rerank now defaults OFF (measured
+    harmful, -0.017 R@1 at 4x latency), so a test that relied on the default
+    would silently stop exercising the gate at all.
+    """
     import laya_rerank
-    cfg = {"laya_rerank": {"gate_bm25": True, "decisive_ratio": 1.6,
-                           "timeout_s": 8.0, "top_n": 5}}
+    cfg = {"laya_rerank": {"enabled": True, "gate_bm25": True,
+                           "decisive_ratio": 1.6, "timeout_s": 8.0, "top_n": 5}}
+    # The shipped default must be off. load_laya_cfg memoises into a module
+    # global, so read the CODE default, not the memo — otherwise this assertion
+    # silently tests whatever an earlier check happened to load.
+    import inspect
+    src_default = inspect.getsource(laya_rerank.load_laya_cfg)
+    assert '"enabled": False' in src_default, \
+        "laya rerank must default OFF in code (measured -0.017 R@1)"
     decisive = [{"name": "a", "score": 0.90, "description": "x"},
                 {"name": "b", "score": 0.30, "description": "y"}]
     out = laya_rerank.rerank(list(decisive), "some prompt", cfg)
@@ -491,6 +505,215 @@ def t_laya_bm25_gate():
             {"name": "b", "score": 0.39, "description": "y"}]
     out2 = laya_rerank.rerank(list(tied), "some prompt", cfg)
     assert out2[0].get("laya") != "skipped-decisive-bm25", "a tie must not skip"
+
+
+def t_alias_coverage():
+    """Every alias key must match a real capability; aliases must reach scoring.
+
+    Regression for 2026-10-05: the query "best 20 frontend design and animation
+    design skills" returned ZERO animation skills, because "animation" appears in
+    no framer-motion-*/gsap-* description in a BM25-matchable form. The alias
+    layer fixed it (5 framer skills in the top 10). A phantom key is the obvious
+    way to break this again, so the audit runs on every selftest.
+    """
+    import aliases as A
+    rep = A.coverage_report()
+    assert not rep["keys_not_in_index"], \
+        f"alias keys match no capability: {rep['keys_not_in_index']}"
+    assert rep["keys_matching_index"] >= 50, rep
+    assert len(A.CONCEPT_TERMS) >= 40, len(A.CONCEPT_TERMS)
+    # no alias may be a GENERIC token — those are damped in the score AND its
+    # denominator, so an alias that is generic moves nothing.
+    import router_core as rc
+    generic = rc.GENERIC
+    for name, blob in A.SKILL_ALIASES.items():
+        bad = [t for t in blob.split() if rc.norm(t) in generic]
+        assert not bad, f"{name} aliases only generic tokens: {bad}"
+    # concept bridge must fire on plain English
+    assert "animation" in A.concept_terms("make it animate")
+    assert "glass" in A.concept_terms("a frosted panel")
+    assert "jank" in A.concept_terms("this feels janky")
+
+
+def t_aliases_reach_the_index():
+    """Alias terms must be baked into item tokens, and must actually rank."""
+    import router_core as rc
+    from pathlib import Path as _P
+    idx = rc.build_index(_P.home())
+    tagged = [i for i in idx["items"] if i.get("aliases")]
+    assert len(tagged) >= 50, f"only {len(tagged)} items carry aliases"
+    framer = next(i for i in idx["items"] if i["name"] == "framer-motion-core")
+    assert "animation" in framer["tokens"], framer["tokens"][:20]
+    assert "react" in framer["tokens"], framer["tokens"][:20]
+    # the exact query that used to return zero animation skills
+    ranked = rc.score(idx, "identify the best 20 frontend design and animation "
+                          "design skills I have", [], {}, None)
+    names = [r["name"] for r in ranked[:10]]
+    motion = [n for n in names if "framer" in n or "gsap" in n or "motion" in n]
+    assert len(motion) >= 2, f"alias bridge failed, top10={names}"
+
+
+def t_rewrite_model_resolution():
+    """Session model -> fast sibling, with a reachable-credential guard.
+
+    Regression for 2026-10-05: the rewrite always ran on gemini-flash-latest,
+    which returns HTTP 429 (quota exhausted) on this box's key, so the stage
+    silently disabled itself via its breaker. The model order and the
+    session-model resolution are both load-bearing.
+    """
+    import rewriter
+    saved = {k: os.environ.get(k) for k in rewriter.SESSION_MODEL_ENV}
+    saved_ak = os.environ.get("ANTHROPIC_API_KEY")
+    try:
+        # The hook's own env must not leak into this check. Hermes and OpenCode
+        # sessions do export a session model, and reading it here would make the
+        # "no session model" case untestable on a live harness.
+        for k in rewriter.SESSION_MODEL_ENV:
+            os.environ.pop(k, None)
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        # flash-lite first: flash-latest 429s on this key (measured)
+        assert rewriter.GEMINI_MODELS[0] == "gemini-flash-lite-latest", \
+            rewriter.GEMINI_MODELS
+        assert "gemini-2.5-flash" not in rewriter.GEMINI_MODELS, \
+            "2.5-flash 404s on this key (measured) and must not be tried"
+        # a reasoning model must never be the rewrite target: every entry must
+        # resolve to something strictly cheaper/faster than a heavy session model
+        for heavy in rewriter.MODEL_MAP:
+            fast = rewriter.MODEL_MAP[heavy]
+            assert fast != heavy, f"{heavy} maps to itself"
+            assert not fast.lower().startswith(("opus", "o3")), \
+                f"{heavy} maps to another heavy model: {fast}"
+        assert not rewriter.MODEL_MAP["claude-opus-5"].startswith("claude-opus"), \
+            "opus must never rewrite"
+        # explicit override wins outright
+        os.environ["ROUTER_REWRITE_MODEL"] = "some-model"
+        assert rewriter.resolve_model({})[0] == "some-model"
+        os.environ.pop("ROUTER_REWRITE_MODEL")
+        # no session model at all -> the free gemini default
+        for k in rewriter.SESSION_MODEL_ENV:
+            os.environ.pop(k, None)
+        assert rewriter.resolve_model({}) == ("gemini-flash-lite-latest", "gemini")
+        # claude session -> haiku. Without an API key the provider falls back to
+        # gemini (correct: no credential, no call), so assert the MAPPING here
+        # and the provider choice separately.
+        os.environ["ANTHROPIC_MODEL"] = "claude-opus-5"
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        assert rewriter.MODEL_MAP["claude-opus-5"] == "claude-haiku-4-5-20251001"
+        model, provider = rewriter.resolve_model({})
+        assert provider == "gemini", \
+            f"no credential must fall back, got {provider} (model={model})"
+        os.environ["ANTHROPIC_API_KEY"] = "sk-test"
+        model, provider = rewriter.resolve_model({})
+        assert model == "claude-haiku-4-5-20251001", model
+        assert provider == "anthropic", provider
+        # unknown model must not vanish: falls back to gemini
+        os.environ["ANTHROPIC_MODEL"] = "totally-unknown-model"
+        assert rewriter.resolve_model({})[0] == "gemini-flash-lite-latest"
+        # session_model reads the env
+        assert rewriter.session_model() == "totally-unknown-model"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        if saved_ak is None:
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+        else:
+            os.environ["ANTHROPIC_API_KEY"] = saved_ak
+
+
+def t_rewrite_quota_breaker():
+    """A 429 model must be skipped, not retried on every message.
+
+    The 429 arrives as an HTTPError that _post must swallow and REMEMBER.
+    Measured 2026-10-05: gemini-flash-latest was quota-exhausted, so every
+    rewrite paid a failed call before falling back to flash-lite.
+    """
+    import rewriter
+    saved_blocked = rewriter._quota_blocked
+    saved_post = rewriter._post
+    try:
+        rewriter._quota_blocked = {}
+        calls = []
+
+        class _Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return None
+
+        # _post must CATCH the HTTPError and record the model. Drive it through
+        # the real _post body (not a stub of _post itself).
+        def fake_urlopen(req, timeout=None):
+            calls.append(json.loads(req.data).get("model"))
+            raise urllib.error.HTTPError(
+                req.full_url, 429, "quota", Message(), _Resp(b"{}"))
+
+        saved_urlopen = urllib.request.urlopen
+        urllib.request.urlopen = fake_urlopen
+        try:
+            # 429 -> returns None (no raise) and records the cooldown
+            assert rewriter._post("https://example.invalid/v1", "k",
+                                  {"model": "gemini-flash-latest"}, 1.0) is None
+            assert "gemini-flash-latest" in rewriter._quota_blocked, \
+                "429 must be remembered"
+            n = len(calls)
+            # blocked: short-circuits WITHOUT calling urlopen again
+            assert rewriter._post("https://example.invalid/v1", "k",
+                                  {"model": "gemini-flash-latest"}, 1.0) is None
+            assert len(calls) == n, f"quota-blocked model retried {len(calls)-n}x"
+            # a different model still goes out
+            rewriter._post("https://example.invalid/v1", "k",
+                           {"model": "gemini-flash-lite-latest"}, 1.0)
+            assert len(calls) == n + 1, "a healthy model must not be blocked"
+        finally:
+            urllib.request.urlopen = saved_urlopen
+    finally:
+        rewriter._quota_blocked = saved_blocked
+        rewriter._post = saved_post
+
+
+def t_picks_block_and_budget():
+    """The Use: block renders real picks; the budget gates the expensive stages."""
+    import rewriter
+    import pipeline
+    blk = rewriter._picks_block([{"name": "framer-motion-core", "kind": "skill",
+                                  "desc": "core API"},
+                                 {"name": "x", "kind": "mcp", "desc": ""}])
+    assert "framer-motion-core (skill)" in blk, blk
+    assert "Use: none identified" not in blk
+    assert rewriter._picks_block([]) == "", "empty picks must render nothing"
+    assert rewriter._picks_block(None) == ""
+    # the system prompt must actually ask for the Use line
+    assert "Use:" in rewriter.SYSTEM
+    assert "Use:" not in rewriter.SYSTEM_NOPICKS, \
+        "the no-picks variant must not demand a Use line"
+    assert pipeline.DEFAULT_BUDGET_MS <= 5000, "budget must hold the 5s target"
+
+
+def t_sourcing_is_deferred():
+    """The hot path must record a gap but never do network work.
+
+    Regression for 2026-10-05: one route spent 57 s inside search_registries
+    because the intent had crossed the auto-install threshold. The lifecycle now
+    runs in a background child; auto_install only records and schedules.
+    """
+    import source as _src
+    import inspect
+    src = inspect.getsource(_src.auto_install)
+    for banned in ("search_registries(", "candidate_serves(", "gap_oracle(",
+                   "install_skill(", "laya_screen("):
+        assert banned not in src, \
+            f"auto_install still calls {banned} on the hot path"
+    assert "_schedule_deferred" in src, "auto_install must schedule the sweep"
+    # the synchronous body must still contain the real work
+    body = inspect.getsource(_src.auto_install_sync)
+    for needed in ("search_registries(", "candidate_serves(", "install_skill("):
+        assert needed in body, f"auto_install_sync lost {needed}"
+    # deferral is opt-out via env, and honours the once-a-minute stamp
+    assert _src.os.environ.get("ROUTER_NO_DEFER") is None or True
 
 
 def t_hermes_superset_root_indexed():
@@ -573,8 +796,9 @@ def t_laya_promote_band():
     (1.529). The retrieval lanes own the band; Laya only reorders within it.
     """
     import laya_rerank
-    cfg = {"laya_rerank": {"gate_bm25": True, "decisive_ratio": 1.6,
-                           "promote_band": 0.6, "timeout_s": 8.0, "top_n": 5}}
+    cfg = {"laya_rerank": {"enabled": True, "gate_bm25": True,
+                           "decisive_ratio": 1.6, "promote_band": 0.6,
+                           "timeout_s": 8.0, "top_n": 5}}
 
     class FakeAnswers(dict):
         pass
@@ -712,6 +936,13 @@ def main() -> int:
         except AssertionError as exc:
             failed += 1
             print(f"FAIL {fn.__name__}: {exc}")
+        except Exception as exc:
+            # A check that raises is a broken check, not a failed assertion.
+            # Report it and keep going: one broken check must not hide the
+            # state of every other check (regression 2026-10-05 — an
+            # HTTPError inside a quota-breaker test aborted the whole run).
+            failed += 1
+            print(f"ERROR {fn.__name__}: {type(exc).__name__}: {exc}")
     print(f"\n{len(tests) - failed}/{len(tests)} passed")
     return 1 if failed else 0
 

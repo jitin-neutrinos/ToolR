@@ -161,7 +161,24 @@ def main() -> int:
     ap.add_argument("--source-remove", default=None, metavar="SKILL",
                     help="undo a sourced skill (removes sourced/SKILL + reindexes)")
     ap.add_argument("--selftest", action="store_true", help="run the router's own checks")
+    ap.add_argument("--deferred", default=None, metavar="JSON",
+                    help=argparse.SUPPRESS)   # internal: background sourcing sweep
     args = ap.parse_args()
+
+    if args.deferred:
+        # Background child of the sourcing stage. Everything slow lives here:
+        # the gap oracle, the registry search, the relevance judge, installs.
+        try:
+            payload = json.loads(args.deferred)
+            import source as _src
+            hit, _entry = _src.auto_install_sync(
+                payload.get("prompt", ""), payload.get("query", ""),
+                rc.load_config(), [])
+            print(json.dumps({"installed": (hit or {}).get("installed"),
+                              "ok": (hit or {}).get("ok", False)}))
+        except Exception as exc:
+            print(json.dumps({"error": repr(exc)[:200]}))
+        return 0
 
     if args.selftest:
         os.execv(sys.executable, [sys.executable, str(SELF.parent / "selftest.py")])

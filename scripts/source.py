@@ -29,8 +29,10 @@ Both are subprocess calls, both fail-open with a log line.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -536,8 +538,61 @@ def auto_install(query: str, prompt: str, cfg: dict,
     key = gaptrack.resolve_key(prompt)
     if not entry or not key:
         return None, {}
-    if entry.get("installed"):
-        return None, entry
+
+    # GAP RECORDING ONLY on the hot path. The oracle, the registry search, the
+    # relevance judge and the install are all deferred to a background sweep:
+    # measured 2026-10-05, one route spent 57 s inside search_registries (hermes
+    # skills search + the MCP registry) because this intent had crossed the
+    # auto-install threshold. That is 11x the hook budget and it blocks the
+    # user's turn. The gap is still recorded now, so nothing is lost — only the
+    # work moves off the path that has to answer in 5 s.
+    _schedule_deferred(prompt, query, cfg)
+    return None, entry
+
+
+def _schedule_deferred(prompt: str, query: str, cfg: dict) -> None:
+    """Run the full sourcing lifecycle in the background, at most once per minute.
+
+    Fire-and-forget: the parent returns immediately. The child writes its result
+    into gaps.json, and the NEXT route for this intent picks it up from the
+    candidate cache. Nothing in the returned card depends on it.
+    """
+    if os.environ.get("ROUTER_NO_DEFER") == "1":
+        return                      # synchronous path, for tests and --source
+    stamp = rc.index_path().parent / "sourcing-sweep.json"
+    now = time.time()
+    try:
+        if stamp.is_file() and now - stamp.stat().st_mtime < 60:
+            return                  # one sweep a minute is plenty
+        stamp.write_text(json.dumps({"at": now}), encoding="utf-8")
+    except OSError:
+        pass
+    env = dict(os.environ)
+    env["ROUTER_NO_DEFER"] = "1"
+    env["ROUTER_REWRITE_MODEL"] = ""          # never spend a model call here
+    try:
+        subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), "--deferred",
+             json.dumps({"prompt": prompt[:2000], "query": query[:200]})],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=env, start_new_session=True)
+    except (OSError, ValueError):
+        pass
+
+
+def auto_install_sync(prompt: str, query: str, cfg: dict,
+                      picks=None) -> tuple[dict | None, dict]:
+    """The real sourcing lifecycle. Runs OFF the hot path only.
+
+    Called by the background sweep (auto_install -> _schedule_deferred) and by
+    `route.py --deferred`. Never call this from a route that has to answer in
+    under 5 s: the oracle, the registry search and the relevance judge are all
+    network calls, and the registry search alone measured 57 s.
+    """
+    key = gaptrack.resolve_key(prompt)
+    entry = gaptrack.load().get(key) if key else None
+    if not key or not entry or entry.get("installed"):
+        return None, entry or {}
     # oracle at the 2nd sighting, once
     if entry.get("served") is None and int(entry.get("count", 0)) >= 2:
         verdict = gap_oracle(prompt, picks or [], cfg)
@@ -562,13 +617,11 @@ def auto_install(query: str, prompt: str, cfg: dict,
     screened = 0
     for c in cands:
         # Cheap gates first: only candidates that could pass them are worth an
-        # Laya screen (4.5 s each on CPU). Measured 2026-10-05: this cut the
-        # auto-install path from 8 screens to 0-1 for a typical candidate table.
+        # Laya screen (4.5 s each on CPU).
         ok, why = _candidate_ok_cheap(c)
         if not ok:
             continue
-        # RELEVANCE gate before any money of time or any install: free + popular
-        # + injection-safe is not the same as "this does what you asked".
+        # RELEVANCE gate before any money of time or any install.
         serves = candidate_serves(c, query)
         if serves is not True:
             _log({"event": "candidate_rejected", "key": key,

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -28,6 +29,16 @@ import router_core as rc  # noqa: E402
 
 DEFAULT_N = 10
 MAX_N = 50
+
+# Wall-clock budget for the whole hook (ms). The card must land inside the
+# harness hook timeout or it is discarded silently — that is what the 10 s
+# Claude timeout used to eat. Budget is enforced between stages, never by
+# killing work mid-flight, so the card is always coherent.
+#
+# Measured on an idle box: bm25 4 ms + dense 420 ms + laya 770 ms + rewrite
+# 2.0 s = ~3.2 s for a full cold route. 5 s leaves headroom for a slow embed
+# without ever hitting the hook timeout.
+DEFAULT_BUDGET_MS = 5000
 
 _N_RE = re.compile(
     r"\btop[- ]?(\d{1,3})\b|\b(\d{1,3})\s+(?:top\s+)?(?:skills|tools|mcp|mcps|plugins|agents|commands)",
@@ -136,6 +147,13 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     dense_path = rc.index_path().parent / (rc.index_path().stem + ".dense.npz")
     stack = rc.stack_tokens(cwd)
     n = user_n(prompt) or int(cfg.get("top_n", DEFAULT_N))
+    t0 = time.monotonic()
+
+    def elapsed_ms() -> float:
+        return (time.monotonic() - t0) * 1000.0
+
+    def budget_left() -> float:
+        return float(cfg.get("budget_ms", DEFAULT_BUDGET_MS)) - elapsed_ms()
 
     # Stage 1 — first-pass route
     ranked1 = _route_once(prompt, index, stack, cfg, dense_path, n)
@@ -143,12 +161,24 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
 
     # Stage 2 — prompt engineer (fail-open; skipped with rewrite=False)
     rewritten, provider = None, None
-    if rewrite:
+    # The rewrite is the most expensive single stage and the least valuable when
+    # the budget is already spent: a card without it is still correct. Skip when
+    # the remaining budget cannot cover a call plus the re-route.
+    if rewrite and budget_left() > float(cfg.get("rewrite_min_budget_ms", 2600)):
         try:
             import rewriter
-            out = rewriter.rewrite(prompt, _route_ctx(picks1), cfg)
+            # Pass the full first-pass pick list so the rewrite can name the
+            # capabilities in a Use: line — the downstream agent is then told
+            # what to load instead of re-deriving it from the card.
+            out = rewriter.rewrite(prompt, _route_ctx(picks1), cfg,
+                                   picks=[{"name": r["name"], "kind": r["kind"],
+                                           "desc": r.get("desc", "")}
+                                          for r in picks1[:8]])
             if out:
-                rewritten, provider = out["prompt"], out["provider"]
+                rewritten = out["prompt"]
+                provider = out.get("model") or out.get("provider")
+                if out.get("session_model") and out["session_model"] != provider:
+                    provider = f"{provider} (session: {out['session_model']})"
         except Exception:
             pass
 
@@ -158,13 +188,16 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     # 2026-10-05: identical picks, ~4 s saved).
     merged_picks = picks1
     if rewritten:
-        ranked2 = _route_once(rewritten, index, stack, cfg, dense_path, n,
-                              rerank=False)
-        picks2 = _top_combined(ranked2, cfg, n)
-        # Stage 4 — union, first-pass order for stable names, second-pass additions after
-        seen = {(r.get("kind"), r.get("name")) for r in picks1}
-        merged_picks = (picks1 + [r for r in picks2
-                                  if (r.get("kind"), r.get("name")) not in seen])[:n]
+        if budget_left() > 400:
+            ranked2 = _route_once(rewritten, index, stack, cfg, dense_path, n,
+                                  rerank=False)
+            picks2 = _top_combined(ranked2, cfg, n)
+            # Stage 4 — union, first-pass order for stable names, second-pass additions after
+            seen = {(r.get("kind"), r.get("name")) for r in picks1}
+            merged_picks = (picks1 + [r for r in picks2
+                                      if (r.get("kind"), r.get("name")) not in seen])[:n]
+        else:
+            provider = f"{provider} (re-route skipped: out of time budget)"
 
     card = rc.render_pipeline_card(prompt, rewritten, provider, merged_picks,
                                    picks1, n, stack, cfg, index.get("stats", {}))

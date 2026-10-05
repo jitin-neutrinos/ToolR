@@ -436,6 +436,17 @@ def build_index(cwd: Path) -> dict:
     for it in items:
         it["tokens"] = tokenize(" ".join((it["name"], it["desc"], it["extra"])))
         it["name_tokens"] = tokenize(it["name"])
+        # Vocabulary bridge: bake each capability's alias terms into its tokens
+        # so BM25, the dense lane and Laya all see them. Applied here, at index
+        # time, rather than at query time, so one change feeds all three lanes.
+        try:
+            import aliases as _al
+            extra_terms = _al.alias_terms_for(it.get("name", ""))
+        except Exception:
+            extra_terms = []
+        if extra_terms:
+            it["tokens"] = it["tokens"] + tokenize(" ".join(extra_terms))
+            it["aliases"] = extra_terms
     return {
         "version": INDEX_VERSION,
         "built_at": int(time.time()),
@@ -508,6 +519,17 @@ def tokenize(text: str) -> list[str]:
         out.append(norm(raw))
         if "-" in raw or "." in raw:  # react-three-fiber -> react, three, fiber
             out.extend(norm(p) for p in re.split(r"[-.]", raw) if len(p) > 2 and p not in STOP)
+    # Concept bridge: map what the user TYPED onto canonical concept tokens, so
+    # "make it animate" reaches the motion skills and "frosted" reaches
+    # glassmorphism. Applied to queries only — the index gets its vocabulary from
+    # SKILL_ALIASES instead, so the two directions cannot double-count.
+    try:
+        import aliases as _al
+        extra = _al.concept_terms(text)
+    except Exception:
+        extra = []
+    if extra:
+        out.extend(norm(t) for t in extra if t not in STOP)
     return out
 
 

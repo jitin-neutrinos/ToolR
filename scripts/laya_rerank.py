@@ -78,8 +78,14 @@ def bearer_token() -> str:
 def load_laya_cfg(base_cfg: dict) -> dict:
     global _cfg_cache
     if _cfg_cache is None:
-        cfg = {"enabled": True, "endpoint": "http://127.0.0.1:8015/v1/systemone",
+        cfg = {"enabled": False, "endpoint": "http://127.0.0.1:8015/v1/systemone",
                    "top_n": 5, "timeout_s": 8.0}
+        # Default OFF, measured 2026-10-05. On the 454-query golden set the Laya rerank
+        # REDUCED recall@1 from 0.1444 to 0.1278 while costing 4x the lane latency
+        # (~770 ms of a ~1.2 s route). It was enabled on the assumption that a smarter
+        # reranker is better; the eval says otherwise. It stays fully wired and one
+        # config flag away ("laya_rerank.enabled": true) — this is a measured default,
+        # not a removal. Re-measure before turning it back on.
         cfg.update({k: v for k, v in (base_cfg.get("laya_rerank") or {}).items()
                     if v is not None and k != "min_confidence"})
         _cfg_cache = cfg
