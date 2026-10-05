@@ -96,7 +96,17 @@ def build_dense(index: dict, dense_path: Path) -> dict:
         h = item_hash(it)
         it["_h"] = h
         hashes.append(h)
-        texts.append(f"{it.get('kind', '')}: {it.get('name', '')}. {it.get('desc', '')}")
+        # The embedded text MUST match what BM25 can see, or the two lanes
+        # disagree about the corpus. Alias terms are included because they are
+        # baked into item tokens at index time; embedding name+desc only meant
+        # the semantic lane never learned the alias vocabulary and its vectors
+        # actively demoted exactly the skills the aliases were added to promote
+        # (measured 2026-10-05: "chat composer" ranked the design skills 2-4 on
+        # BM25 but the dense fusion pushed them out of the top 20 entirely).
+        _alias = it.get("aliases") or []
+        _tail = (" " + " ".join(_alias[:24])) if _alias else ""
+        texts.append(f"{it.get('kind', '')}: {it.get('name', '')}. "
+                     f"{it.get('desc', '')}{_tail}")
 
     keep_h, keep_v = [], []
     if old_meta.get("hashes") and dense_path.with_suffix(".npz").is_file():

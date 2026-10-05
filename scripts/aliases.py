@@ -106,13 +106,51 @@ SKILL_ALIASES: dict[str, str] = {
 
     # ---------------------------------------------------- design: opinion
     "frontend-design": "design frontend ui visual aesthetic taste polish premium "
-                       "beautiful modern elegant crafted distinctive art-direction",
+                       "beautiful modern elegant crafted distinctive art-direction "
+                       "chat composer input box message bubble thread panel "
+                       "sidebar layout view screen widget control dialog menu "
+                       "toolbar header footer card list grid modal popover",
     "design-taste-frontend": "design taste frontend anti-slop generic bland "
-                             "ai-slop distinctive art-direction craft brief",
+                             "ai-slop distinctive art-direction craft brief "
+                             "chat composer input message ui screen",
     "emil-design-eng": "design polish interaction craft motion taste restraint "
-                       "detail microcopy typography rhythm",
+                       "detail microcopy typography rhythm chat composer "
+                       "input affordance state feedback",
     "impeccable": "design polish critique refine harden optimize distill "
-                  "clarify sharpen visual-craft design-review redesign",
+                  "clarify sharpen visual-craft design-review redesign "
+                  "chat composer input box message bubble thread surface "
+                  "screen widget panel control affordance",
+    # ---------------------------------------------------- your own projects
+    # A project-specific skill must never win a GENERIC request on the strength
+    # of a shared adjective. Measured 2026-10-05: "enhance enrich revamp overhaul
+    # the chat composer" put jitinnair-portfolio-revamp at #1 on the bare words
+    # "revamp"/"overhaul" — its description contains "UX overhaul" — while the
+    # skills that would actually help (impeccable, emil-design-eng,
+    # frontend-design) scored nothing at all because none of them contain the
+    # word "chat". The alias terms below give those skills the vocabulary, and
+    # demote_project_owners in router_core keeps a project skill from taking the
+    # top slot on a generic ask.
+    "jitinnair-portfolio-revamp": "portfolio personal homepage showcase "
+                                   "case-study landing about-me",
+    "jitinnair-ui": "component registry brand on-brand house-style "
+                    "jitinnair design-system",
+    "astra-webui": "frontend astra chat web ui dashboard harness streaming",
+    "astra-webui-architecture": "astra streaming storage ordering session "
+                                "concurrency architecture backend",
+    "astra-webui-performance": "frontend performance astra chat lag typing "
+                               "streaming optimize input",
+    "hermes-web-ui-qa": "frontend qa web ui verify screenshot dom chat "
+                        "interface regression render-assert visual-proof",
+    "astra-webui-regression-fixes": "astra regression bug repeat "
+                                    "known-bug pinned verify",
+    "live-ops-dashboard": "dashboard ops live status overview realtime "
+                          "kpi tiles monitoring",
+    "kpi-dashboard-design": "design dashboard kpi metric chart monitoring "
+                            "dashboard realtime visualization",
+    "render-defect-triage": "frontend render blank overlapping clipped defect "
+                            "triage blank-screen",
+    "frontend-layout-measurement": "frontend layout measure overflow clipping "
+                                   "off-centre bleed alignment measurement",
     "supanova-premium-aesthetic": "design premium agency expensive luxury high-end "
                                   "floating-island typography spacing shadow "
                                   "premium-aesthetic $150k",

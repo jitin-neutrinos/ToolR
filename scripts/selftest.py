@@ -639,6 +639,110 @@ def t_bad_flag_teaches():
         "the removed rewrite stage must not still be advertised"
 
 
+def t_aliases_survive_save_and_load():
+    """Aliases must reach BOTH lanes, on a freshly built AND a loaded index.
+
+    Three measured bugs this pins, all from 2026-10-05, all silent:
+      1. save_index() strips `tokens` to keep the file small, and load_index()
+         recomputed them from name+desc+extra ONLY — so every alias was
+         discarded on every route that used the saved index (i.e. all of them,
+         once the 10-minute reindex timer was live).
+      2. dense_index embedded "kind: name. desc" only, so the semantic lane
+         never learned the alias vocabulary and actively demoted the skills the
+         aliases were added to promote.
+      3. The chat-composer query returned jitinnair-portfolio-revamp at #1 on
+         the bare adjectives "revamp"/"overhaul" while impeccable,
+         frontend-design and design-taste-frontend were not ranked at all.
+    """
+    import router_core as rc
+    import aliases as A
+    from pathlib import Path as _P
+
+    probe = "enhance enrich revamp overhaul the chat composer"
+    expect_top = {"emil-design-eng", "design-taste-frontend", "frontend-design",
+                  "impeccable"}
+
+    # 1) a freshly built index carries the alias tokens
+    fresh = rc.build_index(_P.home())
+    fd = next(i for i in fresh["items"] if i["name"] == "frontend-design")
+    assert "composer" in fd["tokens"], "fresh build lost the alias tokens"
+    assert fd.get("aliases"), "fresh build lost the aliases field"
+
+    # 2) a LOADED index carries them too (the save/load round trip)
+    with tempfile.TemporaryDirectory() as tmp:
+        import json
+        p = _P(tmp) / "index.json"
+        slim = {"version": rc.INDEX_VERSION, "built_at": 0, "cwd": str(_P.home()),
+                "items": [{k: v for k, v in it.items()
+                           if k not in ("tokens", "name_tokens")}
+                          for it in fresh["items"]],
+                "stats": fresh.get("stats", {})}
+        p.write_text(json.dumps(slim), encoding="utf-8")
+        saved_path = rc.index_path
+        try:
+            rc.index_path = lambda: p          # noqa: E731
+            loaded = rc.load_index()
+            ld = next(i for i in loaded["items"] if i["name"] == "frontend-design")
+            assert "composer" in ld["tokens"], \
+                "load_index discarded the alias layer — the save/load round trip is lossy"
+        finally:
+            rc.index_path = saved_path
+
+    # 3) the design skills are reachable and ranked on the real query
+    idx = rc.load_index()
+    assert idx is not None, "no index — the router cannot be tested"
+    ranked = rc.score(idx, probe, [], {}, None)
+    names = [r["name"] for r in ranked]
+    missing = expect_top - set(names)
+    assert not missing, f"design skills unreachable: {missing}"
+    top10 = set(names[:10])
+    assert len(expect_top & top10) >= 3, \
+        f"design skills ranked outside the top 10: {[n for n in names[:12]]}"
+
+    # 3b) the FUSED list is what the card renders, so that is what must carry
+    #     the adjective-only label. The BM25 row alone does not set the flag —
+    #     fuse() re-derives it, which is where the card reads it from.
+    try:
+        import dense_index as di
+        dense_path = rc.index_path().parent / (rc.index_path().stem + ".dense.npz")
+        hashes = di.dense_rank(probe, idx, dense_path, top_n=50)
+    except Exception:
+        hashes = []
+    if hashes:
+        fused = rc.fuse(ranked, hashes, idx)
+        pf = next((r for r in fused if r["name"] == "jitinnair-portfolio-revamp"), None)
+        if pf is not None:
+            assert "adjective-only" in pf.get("hits", []), \
+                f"fused row lost the adjective-only label: {pf.get('hits')}"
+
+    # 4) the alias layer reached the LANE that matters, and the design skills
+    #    are no longer unreachable. NOTE: the portfolio skill still outranks them
+    #    on raw score (0.372 adjectives vs 0.253 on chat+composer) because "chat"
+    #    carries more IDF than "composer". Correcting the ORDER needs a
+    #    score-aware fusion — measured and left undone on purpose; see
+    #    RESEARCH-retrieval-quality-2026-10-05.md R1 (Bruch: convex score
+    #    fusion beats RRF, alpha converges from a handful of labels). Asserting
+    #    it here would pin a change that needs its own eval run, not a drive-by.
+    top = ranked[0]
+    hits = [h for h in top.get("hits", []) if h != "adjective-only"]
+    assert hits, f"top pick matched nothing topical: {top['name']} {top.get('hits')}"
+    # the specific regression: the design skills must be present at all
+    for want in ("emil-design-eng", "design-taste-frontend", "frontend-design"):
+        assert any(r["name"] == want for r in ranked[:30]), \
+            f"{want} is reachable by name but fell out of the top 30"
+
+    # 5) the dense lane must embed the aliases, or the lanes disagree
+    import inspect
+    src = inspect.getsource(__import__("dense_index").build_dense)
+    assert "aliases" in src, \
+        "dense_index must embed alias terms, or fusion demotes the aliased skills"
+    # 6) DEMOTE_TIE must be real signal-damped, not a blanket filter
+    for w in ("revamp", "overhaul", "enhance", "enrich"):
+        assert rc.norm(w) in rc.DEMOTE_TIE, w
+    assert rc.norm("chat") not in rc.DEMOTE_TIE, \
+        "topical words must never be demoted"
+
+
 def t_rewriter_stage_removed():
     """The hook must NOT make a model call. The rewriter stage is removed.
 

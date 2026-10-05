@@ -548,6 +548,18 @@ GENERIC = frozenset(
 )
 GENERIC_DAMP = 0.4
 
+# Adjectives that describe HOW to work, not WHAT to work on. Real signal —
+# "revamp" genuinely is a design request — but a match carried ENTIRELY by
+# these is not evidence of topical fit, and the card must say so. Measured
+# 2026-10-05: "enhance enrich revamp overhaul the chat composer" scored
+# jitinnair-portfolio-revamp 0.678 on "revamp"/"overhaul" alone.
+DEMOTE_TIE = frozenset(
+    norm(w)
+    for w in """revamp overhaul enhance enrich improve polish upgrade refresh
+    modernize aesthetic aesthetics design ux ui beautiful premium elegant
+    better nice clean tidy fix bugs issue issues""".split()
+)
+
 
 # Filesystem markers -> stack tokens. Cheap codebase understanding: the router
 # boosts skills that match the repo it is actually sitting in.
@@ -966,6 +978,15 @@ def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
         else:
             base = bm25_row[key].get("score", 0.0)
         row["score"] = round(base + dense_bonus(key), 3)
+        # fuse() rebuilds hits, so the adjective-only label from score() is lost
+        # here. Re-derive it from the BM25 row's own hits, or the card silently
+        # stops telling the reader WHY a pick is weak.
+        if not row.get("adjective_only"):
+            _h = (bm25_row.get(key) or {}).get("hits") or []
+            _topical = [h for h in _h if h not in DEMOTE_TIE and h != "adjective-only"]
+            if _h and not _topical:
+                row["adjective_only"] = True
+                row["hits"] = list(_h) + ["adjective-only"]
         row["fused"] = round(rrf(key), 5)
         row["dense_hit"] = key in dense_pos
         if row["dense_hit"]:
@@ -1169,6 +1190,24 @@ def load_index() -> dict | None:
     for it in data.get("items", []):
         it.setdefault("tokens", tokenize(" ".join((it["name"], it.get("desc", ""), it.get("extra", "")))))
         it.setdefault("name_tokens", tokenize(it["name"]))
+        # Re-apply the alias layer. save_index() strips tokens to keep the file
+        # small, so they are recomputed here on every load — and until this line
+        # existed the recompute used name+desc+extra ONLY, which silently
+        # discarded every alias added since 2026-10-05. Measured: the saved
+        # index reported `frontend-design` WITHOUT the token "composer", so a
+        # chat-composer query could not reach the design skills at all, while a
+        # fresh in-process build ranked them 2-4. `aliases` IS persisted
+        # (save_index keeps every key except tokens), so this only re-tokenizes.
+        try:
+            import aliases as _al
+            extra_terms = _al.alias_terms_for(it.get("name", ""))
+        except Exception:
+            extra_terms = []
+        if extra_terms:
+            already = set(it["tokens"])
+            added = [t for t in tokenize(" ".join(extra_terms)) if t not in already]
+            if added:
+                it["tokens"] = it["tokens"] + added
     return data
 
 
