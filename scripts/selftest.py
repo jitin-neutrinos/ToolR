@@ -553,6 +553,92 @@ def t_aliases_reach_the_index():
     assert len(motion) >= 2, f"alias bridge failed, top10={names}"
 
 
+def t_top_n_flag():
+    """--top N must exist, win over the prompt, and return exactly N.
+
+    Regression for 2026-10-05: an agent ran `route --top 20 "..."` and got
+    "error: unrecognized arguments: --top". The count was only ever read from
+    inside the prompt text, so the obvious flag did not exist. Separately,
+    "top 20 skills" returned 19 picks, because the min_score floor and the tail
+    cut removed real candidates and nothing topped the list back up.
+    """
+    import subprocess
+    import pipeline
+    import router_core as rc
+    from pathlib import Path as _P
+
+    script = _P(__file__).resolve().parent / "route.py"
+    # 1) the flag is accepted, in every spelling
+    for flag in (["--top", "20"], ["-n", "20"], ["--count", "20"]):
+        p = subprocess.run([sys.executable, str(script), *flag,
+                            "revamp the chat composer"],
+                           capture_output=True, text=True, timeout=120)
+        assert p.returncode == 0, f"{flag} failed: {p.stderr[:200]}"
+        assert "Top 20 combined" in p.stdout, \
+            f"{flag} did not yield 20: {p.stdout[:200]}"
+        assert "unrecognized" not in p.stderr, p.stderr[:200]
+
+    # 2) --top overrides a different number named in the prompt
+    p = subprocess.run([sys.executable, str(script), "--top", "5",
+                        "top 20 skills for the chat composer"],
+                       capture_output=True, text=True, timeout=120)
+    assert "Top 5 combined" in p.stdout, p.stdout[:200]
+
+    # 3) a count named in the prompt alone also returns exactly that many
+    for n in (3, 7, 20):
+        out = pipeline.run(f"top {n} skills for the chat composer",
+                           _P.home(), rc.load_config(), rc.load_index(),
+                           rewrite=False, n_override=None)
+        assert len(out["picks"]) == n, \
+            f"asked for {n}, got {len(out['picks'])}"
+
+    # 4) n_override beats the prompt, and the pipeline clamps it
+    out = pipeline.run("top 20 skills", _P.home(), rc.load_config(),
+                       rc.load_index(), rewrite=False, n_override=4)
+    assert len(out["picks"]) == 4, out["picks"]
+    out = pipeline.run("x", _P.home(), rc.load_config(), rc.load_index(),
+                       rewrite=False, n_override=999)
+    assert len(out["picks"]) <= pipeline.MAX_N, out["picks"]
+    out = pipeline.run("x", _P.home(), rc.load_config(), rc.load_index(),
+                       rewrite=False, n_override=0)
+    assert len(out["picks"]) == 1, out["picks"]
+
+
+def t_bad_flag_teaches():
+    """An unknown flag must print a usable example, and never echo itself back.
+
+    Regression for 2026-10-05: the argparse wall ("unrecognized arguments:
+    --top" + a usage block with no example) left the agent guessing. A first
+    attempt at the hint suggested `--top --topp`, i.e. the same failure with
+    more words.
+    """
+    import subprocess
+    from pathlib import Path as _P
+    script = _P(__file__).resolve().parent / "route.py"
+
+    p = subprocess.run([sys.executable, str(script), "--topp", "20", "x"],
+                       capture_output=True, text=True, timeout=120)
+    err = p.stderr
+    assert p.returncode != 0, "a bad flag must fail"
+    assert "not a valid option" in err, err[:200]
+    assert "example:" in err, f"no worked example:\n{err[:300]}"
+    # the suggestion must be a REAL option and must not repeat the bad one
+    assert "--top 10" in err, err[:200]        # the canonical example
+    assert "--top --topp" not in err, "must not echo the bad flag: " + err[:200]
+    assert "--topp 20" not in err.split("example")[0], err[:200]
+    # a typo of --source suggests --source
+    p2 = subprocess.run([sys.executable, str(script), "--soruce", "x"],
+                        capture_output=True, text=True, timeout=120)
+    assert "--source" in p2.stderr, p2.stderr[:200]
+    # --help must show the count option and a worked example
+    p3 = subprocess.run([sys.executable, str(script), "--help"],
+                        capture_output=True, text=True, timeout=60)
+    assert "--top" in p3.stdout, p3.stdout[:300]
+    assert "example:" in p3.stdout, p3.stdout[:400]
+    assert "prompt-engineer" not in p3.stdout.split("options:")[1].split("\n\n")[0], \
+        "the removed rewrite stage must not still be advertised"
+
+
 def t_rewriter_stage_removed():
     """The hook must NOT make a model call. The rewriter stage is removed.
 

@@ -113,6 +113,19 @@ def _top_combined(ranked: list[dict], cfg: dict, n: int) -> list[dict]:
         if key not in seen_keys:
             out.append(r)
             seen_keys.add(key)
+    # Top-up: a request for N must yield N when the corpus has N candidates.
+    # Measured 2026-10-05: "top 20 skills" returned 19 because the tail cut and
+    # the min_score floor removed real candidates. Under-filling is worse than
+    # admitting a weak match — the caller asked for a count, so give it, and the
+    # card already shows the score so a weak tail pick is visible as such.
+    if len(out) < n and ranked:
+        for r in ranked:
+            if len(out) >= n:
+                break
+            key = (r["kind"], r["name"])
+            if key not in seen_keys:
+                out.append(r)
+                seen_keys.add(key)
     return out[:n]
 
 
@@ -137,7 +150,7 @@ def _coverage(picks: list[dict]) -> list[str]:
 
 
 def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
-        rewrite: bool = True) -> dict:
+        rewrite: bool = True, n_override: int | None = None) -> dict:
     """Full pipeline. Returns {card, picks, rewritten, n, provider}.
 
     rewrite=False skips stage 2/3 (LLM prompt-engineer): routing only, no LLM call."""
@@ -146,7 +159,11 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     from pathlib import Path as _P
     dense_path = rc.index_path().parent / (rc.index_path().stem + ".dense.npz")
     stack = rc.stack_tokens(cwd)
-    n = user_n(prompt) or int(cfg.get("top_n", DEFAULT_N))
+    # Explicit --top N beats a number named in the prompt, which beats config.
+    if n_override is not None:
+        n = max(1, min(int(n_override), MAX_N))
+    else:
+        n = user_n(prompt) or int(cfg.get("top_n", DEFAULT_N))
     t0 = time.monotonic()
 
     def elapsed_ms() -> float:

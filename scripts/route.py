@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -96,14 +97,16 @@ def _save_state(picks: list[str], prompt_id: str, skills_needed: bool) -> None:
         pass
 
 
-def card_for(prompt: str, cwd: Path, prompt_id: str = "", rewrite: bool = True) -> str:
+def card_for(prompt: str, cwd: Path, prompt_id: str = "", rewrite: bool = True,
+             n_override: int | None = None) -> str:
     cfg = rc.load_config()
     if not cfg.get("enabled", True):
         return ""
     index = get_index(cwd, cfg)
     try:
         import pipeline
-        result = pipeline.run(prompt, cwd, cfg, index, rewrite=rewrite)
+        result = pipeline.run(prompt, cwd, cfg, index, rewrite=rewrite,
+                              n_override=n_override)
         card = result["card"]
         _save_state(result["picks"], prompt_id or _prompt_key(prompt), bool(result["picks"]))
         return card
@@ -145,8 +148,56 @@ def record(names: str) -> None:
     print(f"recorded: {names}")
 
 
+def _print_usage_hint(have: str, want: str) -> None:
+    """On a bad flag, print the real invocation instead of argparse's wall.
+
+    Measured 2026-10-05: an agent ran `route --top 20 "..."` and got
+    "unrecognized arguments: --top" plus a usage block that names no useful
+    example. The agent then had to guess. A one-line worked example is the
+    difference between the tool being used and being abandoned.
+    """
+    print(f"tool-router: '{have}' is not a valid option. Correct form:\n"
+          f"    ~/.tool-router/route {want} \"<your request>\"\n"
+          f"  options: -n/--top N (how many picks), --no-rewrite (skip the removed "
+          f"rewrite stage), --source \"<need>\" (search free registries), "
+          f"--record a,b (log what you used), --selftest\n"
+          f"  example: ~/.tool-router/route --top 10 \"revamp the chat composer\"",
+          file=sys.stderr)
+
+
+class _ArgParser(argparse.ArgumentParser):
+    """argparse that answers an unknown flag with a usable example.
+
+    The suggestion is the CLOSEST real option, never an echo of what was typed:
+    `--topp` must not come back as `--top --topp`, which is the same failure with
+    extra words. difflib is stdlib and the option list is tiny, so this is free.
+    """
+    OPTIONS = ("--top", "-n", "--count", "--no-rewrite", "--source",
+               "--source-remove", "--record", "--json", "--cwd", "--event",
+               "--hook", "--selftest", "--help", "-h")
+
+    def error(self, message):  # noqa: D401
+        import difflib
+        m = re.search(r"unrecognized arguments: (.+)$", str(message))
+        given = m.group(1).split()[0] if m else str(message)
+        near = difflib.get_close_matches(given, self.OPTIONS, n=1, cutoff=0.6)
+        if near:
+            want = near[0] if near[0] != given else "--top"
+        elif given.startswith("-") and re.search(r"\d", given):
+            want = "--top"          # --top 20 / -n 20 / --top=20
+        else:
+            want = ""
+        _print_usage_hint(given, want)
+        self.exit(2)
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = _ArgParser(
+        prog="~/.tool-router/route",
+        description="Route a request to the most relevant installed skills, MCPs, "
+                    "subagents and commands. Prints a router card.",
+        epilog="example: ~/.tool-router/route --top 10 \"revamp the chat composer\"",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("prompt", nargs="*", help="prompt text (omit when using --hook)")
     ap.add_argument("--hook", action="store_true", help="read harness hook JSON from stdin")
     ap.add_argument("--cwd", default=None)
@@ -155,12 +206,17 @@ def main() -> int:
     ap.add_argument("--event", default="UserPromptSubmit",
                     help="hook event name to echo back (Gemini CLI uses BeforeAgent)")
     ap.add_argument("--no-rewrite", action="store_true",
-                    help="skip the LLM prompt-engineer stage (fast, routing only)")
+                    help="accepted for compatibility; the rewrite stage was "
+                         "removed 2026-10-05 so this changes nothing")
     ap.add_argument("--source", action="store_true",
                     help="HITL: search registries for the query, print screened candidates")
     ap.add_argument("--source-remove", default=None, metavar="SKILL",
                     help="undo a sourced skill (removes sourced/SKILL + reindexes)")
     ap.add_argument("--selftest", action="store_true", help="run the router's own checks")
+    ap.add_argument("-n", "--top", "--count", dest="top_n", type=int, default=None,
+                    metavar="N",
+                    help="return top N capabilities; overrides any number named in "
+                         "the prompt (clamped to 1-50)")
     ap.add_argument("--deferred", default=None, metavar="JSON",
                     help=argparse.SUPPRESS)   # internal: background sourcing sweep
     args = ap.parse_args()
@@ -260,7 +316,7 @@ def main() -> int:
 
     try:
         card = card_for(prompt, cwd_path, str(payload.get("prompt_id", "")) if args.hook else "",
-                        rewrite=not args.no_rewrite)
+                        rewrite=not args.no_rewrite, n_override=args.top_n)
     except Exception as exc:  # a router must never break the user's turn
         if os.environ.get("TOOL_ROUTER_DEBUG"):
             print(f"tool-router error: {exc}", file=sys.stderr)

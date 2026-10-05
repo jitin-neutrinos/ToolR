@@ -28,29 +28,43 @@ skills:
 ~/.tool-router/index --cwd .        # add --list to see the inventory
 ```
 
-**0b. The pipeline (automatic when the hook fires).** Every routed prompt now
-runs four stages, not one:
+**0b. The pipeline (automatic when the hook fires).** Every routed prompt runs
+one stage, and it is fast enough to run again whenever you want:
 
-1. **Route** the raw prompt — top-10 combined picks across skills, MCPs,
-   subagents, commands and plugin skills (BM25 + semantic fusion + Laya rerank).
-2. **Prompt-engineer rewrite** — an LLM restates the request as
-   Goal / Target / Done-when / Steps / Verify. Never adds scope. Skips itself
-   for trivial, very long, or slash-shaped prompts, and when the LLM is down.
-3. **Re-route** the rewritten prompt — the same top-N pass on the richer text.
-4. **Merge + coverage** — union of both pick-sets, a coverage line naming what
-   capability kinds were found, and the load/gate contract.
+1. **Route** — top-10 combined picks across skills, MCPs, subagents, commands
+   and plugin skills. BM25 + local-embedding fusion (Ollama nomic-embed-text)
+   plus a capability-alias layer that bridges plain English to library names, so
+   "animate" reaches the Framer skills and "frosted" reaches glassmorphism.
+   The alias layer exists because the measured failure mode was vocabulary, not
+   ranking: 64% of real prompts shared zero tokens with their own correct
+   capability.
 
-If the prompt names a number ("top 20 tools", "5 skills"), that number replaces
-the default 10 (clamped 1–50). The card shows the rewritten prompt, the
-combined top-N with `[semantic]`/`[laya]` provenance tags, and the coverage line.
+Then a **coverage** line naming which capability kinds were found, and the
+load/gate contract.
+
+The prompt-engineer rewrite stage was **removed 2026-10-05**. It made a network
+call on every single message, the free tiers it used returned HTTP 200 with an
+empty body about one call in five, and the card's pick list already names the
+capabilities to load — so it cost ~2.5-5.5 s (15-18 s outliers) for nothing.
+`--no-rewrite` is still accepted and now does nothing.
+
 **1. Route.** With the prompt-submit hook installed (Claude Code, Codex CLI,
-Gemini CLI) the card arrives on its own — you will see a `## Router card` block
-in the turn's context, and steps 2-4 are then the only work left. Without a
-hook, or any time you want a card for a reformulated request, ask for one:
+Gemini CLI, Hermes gateway) the card arrives on its own — you will see a
+`## Router card` block in the turn's context. Without a hook, or any time you
+want a card for a reformulated request, ask for one:
 
 ```bash
-~/.tool-router/route "the user's request, verbatim"
+~/.tool-router/route --top 10 "the user's request, verbatim"
 ```
+
+**That is the entire interface.** `--top N` is optional (default 10, max 50).
+A number written inside the request ("top 20 skills for…") is honoured too, and
+the flag wins when both are present. A bad flag prints a worked example rather
+than a usage wall; `--help` lists everything. Cost is ~0.2 s with no model call
+and no network, so there is no reason to avoid calling it twice.
+
+When the user says "use the tool router", run the command. Do not re-derive the
+pick list by hand, and do not guess at flags.
 
 Empty output is an answer: nothing specialized applies. Proceed unaided. Cards
 are suppressed for machine-generated submissions (scheduled and loop wakeups,
