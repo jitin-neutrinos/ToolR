@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -490,6 +491,39 @@ def t_laya_bm25_gate():
             {"name": "b", "score": 0.39, "description": "y"}]
     out2 = laya_rerank.rerank(list(tied), "some prompt", cfg)
     assert out2[0].get("laya") != "skipped-decisive-bm25", "a tie must not skip"
+
+
+def t_dense_breaker_not_a_measurement():
+    """A tripped dense breaker must be LOUD, and must not be read as a 0.0 lane.
+
+    Regression for 2026-10-05: two ablation runs returned fused R@1 = 0.0000 with
+    lane_degraded = 796. Cause: _embed's 20 s timeout tripping a 60 s breaker under
+    load average 30 on 28 cores, after which every remaining query silently fell
+    back to BM25. That is the worst kind of eval result — a false zero that looks
+    like "fusion is worthless". The harness does flag it (lane_healthy=False), and
+    this check pins that the flag is reachable and that the breaker file is the
+    documented switch.
+    """
+    import dense_index as di
+    saved_breaker = di._BREAKER_PATH
+    with tempfile.TemporaryDirectory() as tmp:
+        bp = Path(tmp) / "breaker-ollama.json"
+        di._BREAKER_PATH = bp
+        try:
+            # no breaker -> dense_rank is allowed to try (and may fail on a
+            # machine without Ollama, but it must NOT be the breaker doing it)
+            bp.unlink(missing_ok=True)
+            assert di._breaker_active() is False, "no breaker file must mean open"
+
+            # breaker present and unexpired -> short-circuit, return nothing
+            bp.write_text(json.dumps({"until": time.time() + 120}))
+            assert di._breaker_active() is True, "unexpired breaker must be active"
+            assert di._embed("anything") is None, "an open breaker must not embed"
+            assert di._trip(0.0) is None, "_trip returns None"
+            bp.write_text(json.dumps({"until": 0}))
+            assert di._breaker_active() is False, "expired breaker must clear"
+        finally:
+            di._BREAKER_PATH = saved_breaker
 
 
 def t_laya_promote_band():

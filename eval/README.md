@@ -73,23 +73,36 @@ stripping the qualifier and requiring the bare name to be genuinely indexed. It
 never fuzzy-matches: a wrong resolution is a wrong label, and a wrong label
 demotes a good skill.
 
-## Measured baseline (index = 762 items, 2026-10-05)
+## Measured baseline (index = 762 items, golden = 454 rows, 2026-10-05)
 
 ```
-lane            R@1     R@5    R@10     MRR   nDCG@10  abstain  FPR
-bm25          0.1058  0.2953  0.3593  0.1879   0.2327   0.1056  0.8944
+lane            R@1     R@5    R@10     MRR   nDCG@10  abstain  FPR    ms
+bm25          0.1056  0.2944  0.3583  0.1875   0.2321  0.1842  0.8158   2.6k
+dense         0.1222  0.2778  0.3611  0.1950   0.2339  0.0000  1.0000 110.7k
+fused         0.1444  0.3361  0.4139  0.2315   0.2795  0.0000  1.0000 113.2k
 ```
 
-Read this as **retrieval is weak and false positives dominate**. 90% of
-no-capability prompts still produce a pick. The `unreachable@10` figure —
-roughly 60% of gold prompts have *zero* token overlap with their own label —
-says most misses are not ranking problems but vocabulary gaps: real prompts say
+Two things to read here, and they point opposite ways.
+
+**Fusion works, and it costs 40× the wall clock.** +0.039 R@10 and +0.044 MRR
+over BM25 for 2.6 s → 113 s across 454 queries. Every query makes a remote
+embedding call. Whether that trade is worth it is a product decision, but it
+must be made from the recall and the latency together.
+
+**Fusion also destroys the ability to stay silent.** `abstain_precision` goes
+0.1842 → 0.0000: the dense lane's additive bonus lifts items over the 0.28
+floor on every single one of the 38 no-capability prompts. Fusion bought recall
+by buying false positives. That is precisely why these two metrics are reported
+as separate blocks and never averaged into one score — a single "fused score"
+would have shown the improvement and hidden the cost.
+
+**Retrieval is weak overall and false positives dominate.** 82% of
+no-capability prompts still produce a pick, and `unreachable@10` = 0.6417 says
+64% of labelled prompts never see their own capability anywhere in the top 10 —
+so most misses are not ranking problems but vocabulary gaps: real prompts say
 "I want to enhance your system prompts", the skill is called
 `hermes-internals`, and nothing bridges that. Fixing recall means closing
 vocabulary gaps (descriptions, aliases), not tuning BM25.
-
-BM25 alone is not the shipped configuration — `ablate.py` also scores the dense
-and fused lanes, which need Ollama up and are correspondingly slower.
 
 ## Determinism: making BM25 comparable across runs
 
@@ -107,18 +120,44 @@ local decision model whose weights move without a code commit. They are
 reported with `--repeat N` and an explicit min/max spread. Never compare a
 single bare dense number across builds.
 
+**Variance measured on this machine: 0.0000 on every metric for both dense and
+fused across repeated builds.** The embedding service is stable right now. That
+is a measurement, not a guarantee — the `--repeat` machinery exists because the
+day Ollama swaps models or a breaker trips, the spread goes non-zero and a bare
+number becomes a lie.
+
+### Lane health, and why the flag exists
+
+`pipeline._route_once` swallows dense and rerank failures and falls back to
+BM25 — correct behaviour in production, poison in an eval. A degraded fused
+lane returns BM25's exact rows, so it scores **identically** to BM25 (verified:
+same names, same scores, 35× faster) and the metric table reads as "fusion
+contributed nothing".
+
+Every lane therefore returns `(rows, healthy)` and `ablate.py` prints a `deg`
+column plus an explicit warning when a lane fell back; `--assert` treats
+degradation as a regression. This caught a real bug during development: an
+early version of `lane_fused` passed the BM25 *tuple* into `rc.fuse`, producing
+398 `AttributeError`s that the table was about to report as recall 0.0000.
+
 ## What to log per run
 
 `ablate.py --save` appends one JSON line per lane to `runs.jsonl`:
 
 ```json
-{"ts":"2026-10-05T16:40:00","lane":"bm25",
- "metrics":{"recall@1":0.1058,"recall@5":0.2953,"recall@10":0.3593,
-            "mrr":0.1879,"ndcg@10":0.2327,"abstain_precision":0.1056,
-            "false_pick_rate":0.8944,"accuracy_naive":0.1974,"n_positive":360,
-            "n_negative":38,"negative_fraction":0.0956,"lane_failures":0},
+{"ts":"2026-10-05T17:05:00","lane":"bm25",
+ "metrics":{"recall@1":0.1056,"recall@3":0.2167,"recall@5":0.2944,
+            "recall@10":0.3583,"mrr":0.1875,"ndcg@10":0.2321,
+            "abstain_precision":0.1842,"false_pick_rate":0.8158,
+            "accuracy_naive":0.1131,"unreachable@10":0.6417,
+            "n_positive":360,"n_negative":38,"negative_fraction":0.0955,
+            "lane_failures":0},
  "golden":"...","n_queries":454,"index_items":762,"repeat":1,"sig":"…"}
 ```
+
+`unreachable@10` = 0.6417 is the headline: **64% of labelled prompts never see
+their own capability anywhere in the top 10.** That is the vocabulary-gap number
+quoted above, measured rather than estimated.
 
 `sig` is a hash of (lane, metrics) so an unchanged lane is recognisable at a
 glance. `index_items` catches corpus drift — if it changes, every metric in the

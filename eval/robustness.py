@@ -400,6 +400,59 @@ def t_preference_never_demotes_to_negative():
     assert "b" not in learned or learned["b"] == 0.0
 
 
+def t_every_lane_returns_the_same_shape():
+    """Every lane must return (rows, healthy).
+
+    A lane that quietly returns bare rows instead of the tuple makes the next
+    lane's `ranked, healthy = ...` unpack a list of dicts into names — the
+    failure surfaces as 398 AttributeErrors deep in a 90-second run instead of
+    at the seam. Caught here instead.
+    """
+    import ablate
+    index, cfg = _idx(), _cfg()
+    dense_path = rc.index_path().parent / (rc.index_path().stem + ".dense.npz")
+    prompt = "fix the astra web ui chat streaming"
+    if not dense_path.is_file():
+        return                                  # dense not built; nothing to check
+    for lane in ("bm25", "fused"):
+        out = ablate.LANES[lane](prompt, index, cfg, dense_path, [])
+        assert isinstance(out, tuple) and len(out) == 2, (lane, type(out))
+        rows, healthy = out
+        assert isinstance(rows, list), (lane, type(rows))
+        assert isinstance(healthy, bool), (lane, type(healthy))
+        assert all(isinstance(r, dict) for r in rows), lane
+
+
+def t_degraded_lane_is_reported_as_degraded():
+    """A lane that falls back must say so.
+
+    Otherwise a dead dense lane scores exactly like BM25 and the eval concludes
+    "fusion adds nothing" — a conclusion drawn from a broken measurement.
+    """
+    import ablate
+    rows = goldset.load_golden(HERE / "golden.jsonl") if (HERE / "golden.jsonl").is_file() else []
+    if not rows:
+        return
+    # bm25 never degrades by construction
+    agg, _ = ablate.score_lane("bm25", rows[:25], _idx(), _cfg(),
+                               rc.index_path().parent / (rc.index_path().stem + ".dense.npz"))
+    assert agg.get("lane_healthy") is True, agg.get("lane_degraded")
+    assert agg.get("lane_degraded") == 0, agg.get("lane_degraded")
+
+
+def t_golden_set_has_both_classes():
+    """A golden set with no negatives cannot measure false positives at all."""
+    golden = HERE / "golden.jsonl"
+    if not golden.is_file():
+        return
+    rows = goldset.load_golden(golden)
+    pos = [r for r in rows if r.get("label_status") == "positive"]
+    neg = [r for r in rows if r.get("label_status") == "negative"]
+    assert pos, "golden set has no positives"
+    assert neg, "golden set has no negatives — false_pick_rate is unmeasurable"
+    assert len(neg) >= 20, f"only {len(neg)} negatives; FPR is too noisy to gate on"
+
+
 def t_label_roundtrip():
     """golden.jsonl must survive a build -> load -> verify cycle."""
     golden = HERE / "golden.jsonl"
