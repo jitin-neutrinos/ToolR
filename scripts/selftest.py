@@ -493,6 +493,44 @@ def t_laya_bm25_gate():
     assert out2[0].get("laya") != "skipped-decisive-bm25", "a tie must not skip"
 
 
+def t_hermes_superset_root_indexed():
+    """~/.hermes/skills must be in the index — recursively, last, deduped.
+
+    Regression for 2026-10-05: that tree was missing from SKILL_ROOTS entirely,
+    and 542 of its skills live at <category>/<name>/SKILL.md, so even adding it
+    depth-1 would have found 23 of 542. It is now the last root (first-wins
+    dedupe means it only adds what earlier roots missed) and recursive.
+    """
+    import router_core as rc
+    from pathlib import Path as _P
+    specs = rc.SKILL_ROOTS
+    hermes = [s for s in specs if "hermes" in str(s[1])]
+    assert hermes, f"hermes skill root missing from SKILL_ROOTS: {specs}"
+    spec = hermes[0]
+    assert len(spec) > 3 and spec[3] is True, \
+        "hermes root must be flagged recursive (skills sit at depth 2)"
+    assert spec is specs[-1], "hermes root must be LAST so first-wins dedupe holds"
+    # others stay 3-tuples and depth-1
+    for s in specs[:-1]:
+        assert len(s) == 3, f"unexpected 4-field spec before the last: {s}"
+    # the recursive walker must find a nested skill in a temp tree
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _P(tmp)
+        (root / "cat-a" / "deep-skill").mkdir(parents=True)
+        (root / "cat-a" / "deep-skill" / "SKILL.md").write_text("---\nname: deep-skill\n---\n")
+        (root / "flat-skill").mkdir()
+        (root / "flat-skill" / "SKILL.md").write_text("---\nname: flat-skill\n---\n")
+        junk = root / "cat-a" / "node_modules" / "bad"
+        junk.mkdir(parents=True)
+        (junk / "SKILL.md").write_text("---\nname: bad\n---\n")
+        found = {d.name for d in rc._skill_dirs(root, recursive=True)}
+        assert "deep-skill" in found, f"nested skill missed: {found}"
+        assert "flat-skill" in found, f"flat skill missed: {found}"
+        assert "bad" not in found, f"junk dir walked: {found}"
+        shallow = {d.name for d in rc._skill_dirs(root, recursive=False)}
+        assert shallow == {"flat-skill"}, f"depth-1 must not recurse: {shallow}"
+
+
 def t_dense_breaker_not_a_measurement():
     """A tripped dense breaker must be LOUD, and must not be read as a 0.0 lane.
 

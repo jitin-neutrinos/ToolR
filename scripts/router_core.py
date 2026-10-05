@@ -72,10 +72,17 @@ def read_head(path: Path, limit: int = 8000) -> str:
 
 # ------------------------------------------------------------------ discovery
 
-# Per-harness roots. Each entry: (harness, user_dir, project_subdir).
+# Per-harness roots. Each entry: (harness, user_dir, project_subdir[, recursive]).
 # Paths verified against each harness's own docs (see references/harnesses.md).
 # `.agents/skills` is the cross-harness location read by Codex, Gemini, Cursor,
 # OpenCode and OpenClaw; Claude Code does NOT read it, hence the separate entry.
+#
+# `~/.hermes/skills` is the Hermes SUPERSET tree and the last entry on purpose:
+# discover_skills dedupes by name first-wins, so putting it last means it only
+# contributes skills no earlier root had. Measured 2026-10-05: it holds 544
+# SKILL.md files and contributed 0 items to the index, because it was absent
+# from this list entirely — 655 of 762 items came from the Claude tree alone.
+# It is recursive because it is organised <category>/<name>/SKILL.md.
 SKILL_ROOTS = [
     ("any", "~/.agents/skills", ".agents/skills"),
     ("claude", "~/.claude/skills", ".claude/skills"),
@@ -86,6 +93,7 @@ SKILL_ROOTS = [
     ("cursor", "~/.cursor/skills", ".cursor/skills"),
     ("opencode", "~/.config/opencode/skills", ".opencode/skills"),
     ("openclaw", "~/.openclaw/skills", "skills"),
+    ("hermes", "~/.hermes/skills", "", True),
 ]
 
 AGENT_ROOTS = [
@@ -130,26 +138,56 @@ def _expand(p: str, cwd: Path) -> Path:
     return Path(os.path.expanduser(p)) if p.startswith("~") else (cwd / p)
 
 
-def _skill_dirs(root: Path):
-    """Yield every dir holding a SKILL.md, one level deep and via plugin nesting."""
+# Directories that never contain a real skill but cost a full tree walk.
+_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
+              ".mypy_cache", ".pytest_cache", "dist", "build"}
+
+
+def _skill_dirs(root: Path, recursive: bool = False):
+    """Yield every dir holding a SKILL.md.
+
+    Depth-1 by default (the harness layouts: <root>/<name>/SKILL.md). `recursive`
+    is for the Hermes superset tree, which is organised as
+    <root>/<category>/<name>/SKILL.md — measured 2026-10-05: 519 of 542 skills
+    sit at depth 2 there, so a depth-1 walk misses 96% of them.
+    """
     if not root.is_dir():
         return
-    try:
-        for child in sorted(root.iterdir()):
-            if child.is_dir() and (child / "SKILL.md").is_file():
-                yield child
-    except OSError:
+    if not recursive:
+        try:
+            for child in sorted(root.iterdir()):
+                if child.is_dir() and (child / "SKILL.md").is_file():
+                    yield child
+        except OSError:
+            return
         return
+    stack = [root]
+    while stack:
+        cur = stack.pop()
+        try:
+            children = sorted(cur.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if not child.is_dir():
+                continue
+            if child.name in _SKIP_DIRS or child.name.startswith("."):
+                continue
+            if (child / "SKILL.md").is_file():
+                yield child
+            stack.append(child)
 
 
 def discover_skills(cwd: Path) -> list[dict]:
     items, seen = [], set()
-    for harness, user_dir, proj_dir in SKILL_ROOTS:
+    for root_spec in SKILL_ROOTS:
+        harness, user_dir, proj_dir = root_spec[0], root_spec[1], root_spec[2]
+        recursive = bool(root_spec[3]) if len(root_spec) > 3 else False
         roots = [("user", _expand(user_dir, cwd))]
         if proj_dir:  # some roots are user-scope only (bundled skills)
             roots.append(("project", cwd / proj_dir))
         for scope, root in roots:
-            for d in _skill_dirs(root):
+            for d in _skill_dirs(root, recursive=recursive):
                 fm = parse_frontmatter(read_head(d / "SKILL.md"))
                 name = (fm.get("name") or d.name).strip()
                 key = name.lower()
