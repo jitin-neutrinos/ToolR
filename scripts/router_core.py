@@ -955,7 +955,12 @@ def render_pipeline_card(prompt: str, rewritten: str | None, provider: str | Non
                  f"(skills + MCPs + subagents + commands):")
     lines.append("")
     if picks:
-        for r in picks:
+        # Order by the value the card PRINTS. fuse() sorts by RRF rank while
+        # `score` is the BM25-relative + dense-bonus scale, so the rendered list
+        # could read 0.666 above 1.529 while claiming "highest score first"
+        # (measured 2026-10-05). Sort explicitly, stably.
+        ordered = sorted(picks, key=lambda r: -float(r.get("score", 0.0)))
+        for r in ordered:
             why = ",".join(r.get("hits", [])[:4]) or ("semantic" if r.get("dense_hit") else "stack")
             tags = []
             if r.get("dense_hit"):

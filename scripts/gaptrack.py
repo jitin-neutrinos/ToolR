@@ -13,6 +13,7 @@ Config (config.json -> "sourcing"):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -20,6 +21,10 @@ from pathlib import Path
 import router_core as rc
 
 STATE = None  # lazily: index_path().parent / "gaps.json"
+
+# Above this many distinct content tokens an intent is keyed by hash, not by its
+# literal token set (see _intent_key). 24 covers every real user request.
+MAX_INTENT_TOKENS = 24
 
 
 def _path() -> Path:
@@ -58,7 +63,25 @@ def _find_key(data: dict, toks: set[str], min_jaccard: float = 0.6) -> str | Non
 
 
 def _intent_key(prompt: str) -> str:
-    return " ".join(sorted(_tokens(prompt)))
+    """Key for a NEW intent. Short intents key on their token set (readable);
+    long ones (a dumped system prompt, a whole session transcript) key on a
+    stable hash instead.
+
+    Measured 2026-10-05: unbounded token joins produced a 4,581-char key from a
+    single Astra training-pipeline system prompt, which fuzzy-matched ~nothing
+    useful and then paid the full network sourcing cost on EVERY subsequent
+    route (that entry's count reached 720). Hashing long intents caps key size
+    and stops cross-intent collisions.
+    """
+    toks = sorted(_tokens(prompt))
+    if len(toks) <= MAX_INTENT_TOKENS:
+        return " ".join(toks)
+    h = hashlib.sha1(" ".join(toks).encode("utf-8")).hexdigest()[:16]
+    return f"intent:{h} ({len(toks)} tokens)"
+
+
+def key_is_hashed(key: str) -> bool:
+    return str(key).startswith("intent:")
 
 
 def load() -> dict:
@@ -108,6 +131,25 @@ def mark_installed(key: str, what: str) -> None:
         data[key]["installed"] = what
         data[key]["promoted"] = False
         _save(data)
+
+
+def unmark_installed(key: str, reason: str = "manual") -> bool:
+    """Clear the installed marker (an install was undone / rolled back).
+
+    Without this a rolled-back install keeps the intent locked out forever:
+    auto_install returns early on entry['installed'], so a bad candidate that was
+    removed would otherwise block the correct one indefinitely. Measured
+    2026-10-05: dbs-chatroom was installed by a relevance-blind auto tier and
+    removed minutes later; the marker survived and locked the intent.
+    """
+    data = load()
+    entry = data.get(key)
+    if not entry or not entry.get("installed"):
+        return False
+    entry["installed"] = None
+    entry["reopened_at"] = int(time.time())
+    _save(data)
+    return True
 
 
 def auto_eligible(entry: dict, cfg: dict) -> bool:

@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -291,6 +294,236 @@ def t_source_free():
     assert not _src._free("Upgrade to Pro plan for batch mode")
     assert _src._installs("Indexed by skills.sh from x/y · 10,059 installs") == 10059
     assert _src._installs("no numbers here") is None
+
+
+def t_long_intent_hashed():
+    """A pasted system prompt must not become a 4,581-char gap key.
+
+    Regression for 2026-10-05: _intent_key joined every content token, so one
+    dumped prompt produced a 4,581-char key that fuzzy-matched unrelated traffic
+    and paid the full 24 s network sourcing cost on every route (count hit 720).
+    """
+    import gaptrack
+    short = gaptrack._intent_key("remove the background from a photo")
+    assert len(short) <= 200 and not gaptrack.key_is_hashed(short), short
+    huge = " ".join(f"token{i}" for i in range(400))
+    long_key = gaptrack._intent_key(huge)
+    assert gaptrack.key_is_hashed(long_key), long_key
+    assert len(long_key) < 60, f"hashed key still too long: {len(long_key)}"
+    assert gaptrack._intent_key(huge) == long_key, "hash must be deterministic"
+    other = gaptrack._intent_key(" ".join(f"tok{i}" for i in range(400)))
+    assert other != long_key, "different content must hash differently"
+
+
+def t_candidate_cache():
+    """Registry search must be cached per intent, with a freshness ceiling.
+
+    Regression for 2026-10-05: the auto tier searched hermes skills + the MCP
+    registry (24 s measured) on EVERY route for an intent already resolved days
+    earlier.
+    """
+    import source as _src
+    import gaptrack as _gt
+    now = int(time.time())
+    assert _src.cached_candidates("k", {})[0] is None, "empty entry must miss"
+    entry = {"candidates": {"at": now, "rows": [{"name": "a", "kind": "skill"}]}}
+    rows, age = _src.cached_candidates("k", entry)
+    assert rows is not None and rows[0]["name"] == "a", rows
+    assert 0 <= age < 5, age
+    stale = {"candidates": {"at": now - _src.CACHE_STALE_S - 10,
+                            "rows": [{"name": "b"}]}}
+    assert _src.cached_candidates("k", stale)[0] is None, "stale cache must miss"
+    with tempfile.TemporaryDirectory() as tmp:
+        _gt.STATE = Path(tmp) / "gaps.json"
+        _gt.record_gap("crop background photo please", {"sourcing": {"auto_threshold": 3}})
+        key = _gt.resolve_key("crop background photo please")
+        assert key
+        _src.store_candidates(key, [{"name": "x", "kind": "skill", "free": True,
+                                     "installs": 5000, "description": "d"}])
+        got, _age = _src.cached_candidates(key, _gt.load()[key])
+        assert got and got[0]["name"] == "x", got
+        _gt.mark_installed(key, "x")
+        _src.store_candidates(key, [{"name": "y"}])   # must be refused
+        assert _gt.load()[key]["candidates"]["rows"][0]["name"] == "x", \
+            "cache must not be overwritten after install"
+        _gt.STATE = None
+
+
+def t_screen_cache_and_cheap_gates():
+    """Injection screens are cached, and cheap gates run BEFORE the Laya screen.
+
+    Regression for 2026-10-05: every candidate was screened with a 4.5 s Laya
+    call even when it was an MCP (auto tier is skills-only) or paid.
+    """
+    import source as _src
+    mcp = {"kind": "mcp", "free": True, "installs": 99999}
+    paid = {"kind": "skill", "free": False, "installs": 99999}
+    thin = {"kind": "skill", "free": True, "installs": 12}
+    good = {"kind": "skill", "free": True, "installs": 5000}
+    assert _src._candidate_ok_cheap(mcp)[0] is False, "mcp is never auto"
+    assert _src._candidate_ok_cheap(paid)[0] is False, "paid is never auto"
+    assert _src._candidate_ok_cheap(thin)[0] is False, "low installs never auto"
+    assert _src._candidate_ok_cheap(good)[0] is True, "a good skill must pass cheap"
+    assert _src._candidate_ok_auto(good, "safe")[0] is True
+    assert _src._candidate_ok_auto(good, "malicious")[0] is False
+    assert _src._candidate_ok_auto(good, None)[0] is False, "unsure screen fails closed"
+    with tempfile.TemporaryDirectory() as tmp:
+        cached = Path(tmp) / "screen-cache.json"
+        _src.SCREEN_CACHE = cached
+        _src._screen_cache = {"deadbeef": "safe", "cafe": ""}
+        _src._save_screen_cache()
+        _src._screen_cache = None
+        assert _src._load_screen_cache() == {"deadbeef": "safe", "cafe": ""}
+        _src.SCREEN_CACHE = None
+        _src._screen_cache = {}
+
+
+def t_candidate_relevance_gate():
+    """A candidate must be judged RELEVANT before any unattended install.
+
+    Regression for 2026-10-05: the auto tier installed a Chinese multi-role
+    chatroom skill for "fix the astra chat streaming bug" — free, popular and
+    injection-safe, but it matched the word "chat" and did nothing about
+    streaming. Relevance is now a separate, fail-closed judge.
+    """
+    import source as _src
+    saved = _src._post_judge
+
+    def fake(cand, prompt):
+        if cand.get("name") == "right-skill":
+            return True
+        if cand.get("name") == "chat-bot":
+            return False
+        return None            # judge unsure
+
+    _src._post_judge = fake
+    try:
+        assert _src.candidate_serves({"name": "right-skill"}, "x") is True
+        assert _src.candidate_serves({"name": "chat-bot"}, "x") is False
+        assert _src.candidate_serves({"name": "mystery"}, "x") is None, \
+            "unsure must stay None so the caller fails closed"
+    finally:
+        _src._post_judge = saved
+
+
+def t_laya_bearer_token():
+    """The reranker must send LAYA_MCP_TOKEN or every call 401s.
+
+    Regression for 2026-10-05: no Authorization header was sent at all, so the
+    rerank stage was dead on every route and the breaker hid the cause.
+    """
+    import laya_rerank
+    import urllib.request
+    orig_env = os.environ.get("LAYA_MCP_TOKEN")
+    orig_conf = laya_rerank.TOKEN_CONF
+    orig_cache = laya_rerank._token_cache
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            conf = Path(tmp) / "token.conf"
+            # both real systemd drop-in shapes must parse
+            conf.write_text('[Service]\nEnvironment="LAYA_MCP_TOKEN=secret-abc"\n'
+                            'Environment=LAYA_ENGLISH_MODEL=/x/y\n')
+            laya_rerank.TOKEN_CONF = conf
+            laya_rerank._token_cache = None
+            os.environ.pop("LAYA_MCP_TOKEN", None)
+            assert laya_rerank.bearer_token() == "secret-abc", "read from drop-in"
+            bare = Path(tmp) / "bare.conf"
+            bare.write_text("LAYA_MCP_TOKEN=plain-value\n")
+            laya_rerank.TOKEN_CONF = bare
+            laya_rerank._token_cache = None
+            assert laya_rerank.bearer_token() == "plain-value", "bare form too"
+            laya_rerank.TOKEN_CONF = conf
+            laya_rerank._token_cache = None
+            captured = {}
+
+            def fake_urlopen(req, timeout=None):
+                captured["headers"] = dict(req.headers)
+                raise urllib.error.URLError("down")
+
+            real = urllib.request.urlopen
+            urllib.request.urlopen = fake_urlopen
+            try:
+                assert laya_rerank._ask("http://127.0.0.1:1/x", {}, {}, 0.1) is None
+            finally:
+                urllib.request.urlopen = real
+            auth = {k.lower(): v for k, v in captured["headers"].items()}
+            assert auth.get("authorization") == "Bearer secret-abc", auth
+            os.environ["LAYA_MCP_TOKEN"] = "from-env"
+            laya_rerank._token_cache = None
+            assert laya_rerank.bearer_token() == "from-env"
+    finally:
+        laya_rerank.TOKEN_CONF = orig_conf
+        laya_rerank._token_cache = orig_cache
+        if orig_env is None:
+            os.environ.pop("LAYA_MCP_TOKEN", None)
+        else:
+            os.environ["LAYA_MCP_TOKEN"] = orig_env
+
+
+def t_laya_auth_fault_not_breakered():
+    """A 401 is a config fault: reported, but never hidden behind a breaker."""
+    import laya_rerank
+    breaker = laya_rerank.BREAKER
+    with tempfile.TemporaryDirectory() as tmp:
+        bpath = Path(tmp) / "breaker-laya.json"
+        laya_rerank.BREAKER = bpath
+        laya_rerank._auth_fault_at = 0.0
+        assert laya_rerank._auth_fault_recent() is False, "no fault yet"
+        laya_rerank._auth_fault_at = time.time()
+        assert laya_rerank._auth_fault_recent() is True, "recent 401 must be seen"
+        laya_rerank._auth_fault_at = time.time() - 1000
+        assert laya_rerank._auth_fault_recent() is False, "stale 401 must not count"
+    laya_rerank.BREAKER = breaker
+
+
+def t_laya_bm25_gate():
+    """A decisive BM25 top pick skips the slow rerank; a tie does not."""
+    import laya_rerank
+    cfg = {"laya_rerank": {"gate_bm25": True, "decisive_ratio": 1.6,
+                           "timeout_s": 8.0, "top_n": 5}}
+    decisive = [{"name": "a", "score": 0.90, "description": "x"},
+                {"name": "b", "score": 0.30, "description": "y"}]
+    out = laya_rerank.rerank(list(decisive), "some prompt", cfg)
+    assert out[0]["name"] == "a", "order must stand"
+    assert out[0].get("laya") == "skipped-decisive-bm25", out[0].get("laya")
+    tied = [{"name": "a", "score": 0.40, "description": "x"},
+            {"name": "b", "score": 0.39, "description": "y"}]
+    out2 = laya_rerank.rerank(list(tied), "some prompt", cfg)
+    assert out2[0].get("laya") != "skipped-decisive-bm25", "a tie must not skip"
+
+
+def t_laya_promote_band():
+    """A weak pick must NOT be promoted above a much stronger fused score.
+
+    Regression for 2026-10-05: for "fix the astra chat streaming bug" Laya picked
+    hermes-messaging-triage (fused score 0.666) and an unconditional promote put it
+    above astra-webui-performance (1.386) and astra-webui-regression-fixes
+    (1.529). The retrieval lanes own the band; Laya only reorders within it.
+    """
+    import laya_rerank
+    cfg = {"laya_rerank": {"gate_bm25": True, "decisive_ratio": 1.6,
+                           "promote_band": 0.6, "timeout_s": 8.0, "top_n": 5}}
+
+    class FakeAnswers(dict):
+        pass
+
+    # a tie in scores -> the pick may be promoted
+    tie = [{"name": "weak", "score": 1.0, "description": "a"},
+           {"name": "other", "score": 0.98, "description": "b"}]
+    saved_ask = laya_rerank._ask
+    laya_rerank._ask = lambda *a, **k: {
+        "pick": {"choice": "weak", "probabilities": {"weak": 0.9, "other": 0.05}}}
+    try:
+        out = laya_rerank.rerank(list(tie), "p", cfg)
+        assert out[0]["name"] == "weak", "a tie must still allow the promote"
+        # a big score gap -> the pick is out of band and the order must stand
+        gap = [{"name": "strong", "score": 1.529, "description": "a"},
+               {"name": "weak", "score": 0.666, "description": "b"}]
+        out2 = laya_rerank.rerank(list(gap), "p", cfg)
+        assert out2[0]["name"] == "strong", \
+            f"out-of-band promote regressed: {[r['name'] for r in out2[:2]]}"
+    finally:
+        laya_rerank._ask = saved_ask
 
 
 def t_laya_gate():

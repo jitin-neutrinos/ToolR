@@ -169,13 +169,24 @@ def main() -> int:
     if args.source_remove:
         try:
             import source as _src
-            detail = _src.distribute_skill(args.source_remove, remove=True)
-            src_dir = Path.home() / ".hermes/skills/sourced" / args.source_remove
+            import gaptrack as _gt
+            name = args.source_remove
+            detail = _src.distribute_skill(name, remove=True)
+            src_dir = Path.home() / ".hermes/skills/sourced" / name
             if src_dir.exists():
                 import shutil as _sh
                 _sh.rmtree(src_dir)
             wiring = _src.wire_fleet()
-            print(f"removed {args.source_remove}: harnesses={detail}, wiring={wiring}")
+            # clear the lockout so the intent can source a better candidate later
+            _gt_data = _gt.load()
+            cleared = [k for k, v in _gt_data.items()
+                       if v.get("installed") == name]
+            for k in cleared:
+                _gt.unmark_installed(k, reason=f"removed {name}")
+            _src._log({"event": "source_remove", "skill": name,
+                       "intents_reopened": cleared})
+            print(f"removed {name}: harnesses={detail}, wiring={wiring}, "
+                  f"intents_reopened={len(cleared)}")
         except Exception as exc:
             print(f"remove failed: {exc!r}")
         return 0

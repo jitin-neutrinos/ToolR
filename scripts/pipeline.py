@@ -44,7 +44,7 @@ def user_n(prompt: str) -> int | None:
 
 
 def _route_once(prompt: str, index: dict, stack: list[str], cfg: dict,
-                dense_path, n: int) -> list[dict]:
+                dense_path, n: int, rerank: bool = True) -> list[dict]:
     ranked = rc.score(index, prompt, stack, rc.load_learned(), cfg.get("mcp_hints"))
     # dense lane (advisory)
     try:
@@ -54,6 +54,8 @@ def _route_once(prompt: str, index: dict, stack: list[str], cfg: dict,
     except Exception:
         pass  # fusion needs the dense lane; BM25 order stands without it
     # laya rerank (advisory, margin-gated)
+    if not rerank:
+        return ranked
     try:
         import laya_rerank
         for r in ranked[:12]:
@@ -150,10 +152,14 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
         except Exception:
             pass
 
-    # Stage 3 — re-route the rewritten prompt
+    # Stage 3 — re-route the rewritten prompt. The rerank runs ONCE per route:
+    # stage 1 already applied it to the original prompt, and a second 4 s CPU
+    # call on a lightly reworded prompt bought nothing measurable (measured
+    # 2026-10-05: identical picks, ~4 s saved).
     merged_picks = picks1
     if rewritten:
-        ranked2 = _route_once(rewritten, index, stack, cfg, dense_path, n)
+        ranked2 = _route_once(rewritten, index, stack, cfg, dense_path, n,
+                              rerank=False)
         picks2 = _top_combined(ranked2, cfg, n)
         # Stage 4 — union, first-pass order for stable names, second-pass additions after
         seen = {(r.get("kind"), r.get("name")) for r in picks1}
