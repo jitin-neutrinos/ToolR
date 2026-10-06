@@ -103,7 +103,8 @@ def lane_fused(prompt, index, cfg, dense_path, stack):
         hashes = di.dense_rank(prompt, index, dense_path, top_n=50)
         if not hashes:
             return base, False
-        return rc.fuse(base, hashes, index, alpha=cfg.get("fusion_alpha")), True
+        return rc.fuse(base, hashes, index, alpha=cfg.get("fusion_alpha"),
+                       prompt=prompt), True
     except Exception:
         return base, False
 

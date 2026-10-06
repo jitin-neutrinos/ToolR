@@ -62,7 +62,7 @@ def _route_once(prompt: str, index: dict, stack: list[str], cfg: dict,
         import dense_index as di
         dense_hashes = di.dense_rank(prompt, index, dense_path, top_n=50)
         ranked = rc.fuse(ranked, dense_hashes, index,
-                         alpha=cfg.get("fusion_alpha"))
+                         alpha=cfg.get("fusion_alpha"), prompt=prompt)
     except Exception:
         pass  # fusion needs the dense lane; BM25 order stands without it
     # laya rerank (advisory, margin-gated)

@@ -931,7 +931,8 @@ def _dense_hash_of(item: dict) -> str:
 
 
 def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
-         k: int = 60, top_n: int = 50, alpha: float | None = None) -> list[dict]:
+         k: int = 60, top_n: int = 50, alpha: float | None = None,
+         prompt: str = "") -> list[dict]:
     """Fuse the BM25 ranking with the dense (embedding) ranking.
 
     Fusion is a CONVEX COMBINATION of per-query-normalised scores (TM2C2,
@@ -1065,7 +1066,7 @@ def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
     # Exact-name guarantee: the fused ordering must not bury a capability the
     # prompt names by its exact name. Walk the FULL fused list (not just the
     # head — the guarantee is against burying, not against the top-1 slot).
-    prompt_l = (bm25_rows[0].get("_prompt_l", "") if bm25_rows else "") or ""
+    prompt_l = (prompt or (bm25_rows[0].get("_prompt_l", "") if bm25_rows else "") or "").lower()
     exact = [r for r in out if _named_exactly(r, prompt_l)]
     if exact:
         keep = [r for r in out if r not in exact]
