@@ -96,6 +96,45 @@ SESSION_MODEL_ENV = (
     "AGY_MODEL",
 )
 
+# Text-engine session DB (Hermes `state.db`). The gateway refreshes
+# sessions.model on every turn, so this is the ground truth on the machine
+# the gateway runs on — read-only, and a stat + tiny SELECT, not a hop.
+SESSION_DB = Path(os.environ.get(
+    "TOOLR_SESSION_DB", "~/.hermes/state.db")).expanduser()
+_SESSION_DB_TTL = 5.0           # seconds; per-process memo only
+_db_memo: dict = {}
+
+
+def _db_model() -> dict | None:
+    """Most-recently-active session's (model, provider) from state.db.
+
+    Filter output_tokens>0 so poll/passthrough rows don't win. Returns None
+    on any absence/error — this whole layer is best-effort.
+    """
+    try:
+        p = SESSION_DB
+        if not p.is_file():
+            return None
+        now = time.time()
+        mtime = p.stat().st_mtime
+        if (_db_memo.get("key") == (p, mtime)
+                and now - _db_memo.get("at", 0) < _SESSION_DB_TTL):
+            return _db_memo.get("val")
+        import sqlite3
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=2.0)
+        row = con.execute(
+            "SELECT model, billing_provider FROM sessions "
+            "WHERE model IS NOT NULL AND last_activity_at > ? "
+            "ORDER BY last_activity_at DESC LIMIT 1",
+            (now - 3600,)).fetchone()
+        con.close()
+        val = {"model": row[0], "provider": row[1]} if row else None
+        _db_memo.clear()
+        _db_memo.update({"key": (p, mtime), "at": now, "val": val})
+        return val
+    except Exception:
+        return None
+
 
 def session_model() -> str | None:
     """The harness's current model from the environment, else None."""
@@ -116,14 +155,25 @@ def _load_overrides() -> dict:
 def resolve(model: str | None = None) -> dict:
     """Profile dict for `model` (falls back to the session model, then default).
 
+    Source order: explicit arg > hook env > Hermes state.db session row >
+    built-in prior. The prior's numbers are NEVER presented as the session's
+    facts — `source: "prior"` marks it and decision()'s line says so.
+
     Override file entries are matched by substring against `model`, most
     specific (longest key) first.
     """
     model = (model or session_model() or "").strip()
+    model_source = "arg" if model else ("env" if session_model() else None)
+    db = None
+    if not model:
+        db = _db_model()
+        if db and db.get("model"):
+            model = db["model"]
+            model_source = "session-db"
     overrides = _load_overrides()
     for key in sorted(overrides, key=len, reverse=True):
         k = key.lower()
-        if k != "*" and k in model.lower():
+        if k != "*" and model and k in model.lower():
             prof = dict(overrides[key])
             prof.setdefault("match", key)
             prof.setdefault("tier", "balanced")
@@ -132,17 +182,18 @@ def resolve(model: str | None = None) -> dict:
             prof.setdefault("out", 0.0)
             prof["source"] = "override"
             return prof
-    m = model.lower()
+    m = (model or "").lower()
     for prof in MODEL_PROFILES:
         key = prof["match"].lower()
-        if key == "*" or key in m:
+        if model and (key == "*" or key in m):
             out = dict(prof)
-            out["model"] = model or "(unknown)"
-            out["source"] = "builtin"
+            out["model"] = model
+            out["source"] = f"builtin:{model_source}" if model_source else "builtin"
             return out
     out = dict(DEFAULT_PROFILE)
     out["model"] = model or "(unknown)"
-    out["source"] = "builtin-default"
+    # A prior, not a measurement: decision() renders this honestly.
+    out["source"] = "prior"
     return out
 
 
@@ -176,6 +227,19 @@ def decision(profile: dict, user_n: int | None = None, cfg: dict | None = None) 
                 n = min(n, picks)
                 break
     n = max(1, min(n, 50))
+    src = profile.get("source", "")
+    if src == "prior":
+        # The honest rendering: this is a conservative prior, not a finding.
+        line = (f"model not exposed by harness — conservative default "
+                f"(tier {profile.get('tier')}, ctx "
+                f"{int(profile.get('ctx') or 0):,}, {n} picks; "
+                f"set TOOLR_MODEL or ask the harness to export its model)")
+    else:
+        via = {"session-db": " (from session db)", "env": "",
+               "arg": ""}.get(str(src).split(":")[-1], "")
+        line = (f"model {profile.get('model', '?')} · {profile.get('tier', '?')} tier · "
+                f"ctx {int(profile.get('ctx') or 0):,}{via}" +
+                (f" · cap {n} picks (explicit)" if user_n is not None else f" · {n} picks"))
     return {
         "max_picks": n,
         "model": profile.get("model", "(unknown)"),
@@ -183,11 +247,9 @@ def decision(profile: dict, user_n: int | None = None, cfg: dict | None = None) 
         "ctx": profile.get("ctx"),
         "in_cost": profile.get("in"),
         "out_cost": profile.get("out"),
-        "source": profile.get("source"),
+        "source": src,
         # surfaced on the card as one line
-        "line": (f"model {profile.get('model', '?')} · {profile.get('tier', '?')} tier · "
-                 f"ctx {int(profile.get('ctx') or 0):,}" +
-                 (f" · cap {n} picks (explicit)" if user_n is not None else f" · {n} picks")),
+        "line": line,
     }
 
 
