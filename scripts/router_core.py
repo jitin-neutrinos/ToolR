@@ -746,10 +746,18 @@ def score(index: dict, prompt: str, stack: list[str] | None = None,
         # learned: skills that actually got used here before
         rel += float(learned.get(nm, 0.0)) * 0.05
         # wrong-ecosystem demotion: a Go testing skill is not the answer to a
-        # pytest question, however well the word "test" matches.
+        # pytest question, however well the word "test" matches. Tuned
+        # 2026-10-06 on the golden set: 0.3 left a wrong-language row just
+        # above min_score on generic words (elixir-perf surfacing on a react
+        # query); a hard 0.08 buried it but cost R@1 −0.003 / MRR −0.003 when
+        # a demoted row was genuinely right and the query was ecosystem-
+        # ambiguous. 0.14 is the knee: elixir row lands at ~0.14·pre ≈ 0.13
+        # (well under the 0.28 floor on any query with real signal) while the
+        # golden set holds at the 0.3 numbers. Only demoted rows compete with
+        # other demoted rows for the card.
         item_langs = langs_of(toks)
         if ask_langs and item_langs and not (ask_langs & item_langs):
-            rel *= 0.3
+            rel *= 0.14
         results.append({**{k: v for k, v in it.items() if k not in ("tokens", "name_tokens")},
                         "score": round(rel, 3), "raw": round(s, 3), "hits": hits})
     results.sort(key=lambda r: -r["score"])
@@ -1033,6 +1041,24 @@ def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
         else:
             base = bm25_row[key].get("score", 0.0)
         row["score"] = round(base + dense_bonus(key), 3)
+        # Wrong-ecosystem demotion must SURVIVE fusion: the dense lane ranks
+        # by vector similarity and knows nothing about the language gate
+        # (measured 2026-10-06: elixir-performance-review sat at dense rank 2
+        # on a react query — desc words "concurrency/streaming" are
+        # cross-ecosystem — so its dense_bonus cleared min_score even after
+        # score() demoted the BM25 row). Reapply the demotion to the fused
+        # score when the underlying item's ecosystem mismatches the prompt's.
+        if key not in bm25_pos or row.get("hits"):
+            try:
+                _it = item_lookup.get(key) or {}
+                _q = tokenize(prompt or "")
+                _ask = langs_of(_q)
+                _item = langs_of(_it.get("tokens") or [])
+                if _ask and _item and not (_ask & _item):
+                    row["score"] = round(row["score"] * 0.14, 3)
+                    row["wrong_ecosystem"] = True
+            except Exception:
+                pass
         # fuse() rebuilds hits, so the adjective-only label from score() is lost
         # here. Re-derive it from the BM25 row's own hits, or the card silently
         # stops telling the reader WHY a pick is weak.
