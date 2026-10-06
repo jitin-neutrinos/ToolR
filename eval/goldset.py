@@ -39,7 +39,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import router_core as rc  # noqa: E402
 
-ASTRA_DB = Path("/home/notjitin/Work/projects/astra-webui/data/astra-training.db")
+ASTRA_DB = Path(os.environ.get(
+    "TOOLR_SESSION_DB", "~/Work/projects/astra-webui/data/astra-training.db"
+)).expanduser()  # optional session-log source; goldset falls back to gaps.json when absent
 GAPS = Path(os.path.expanduser("~/.tool-router/gaps.json"))
 DEFAULT_OUT = Path(__file__).resolve().parent / "golden.jsonl"
 

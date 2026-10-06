@@ -120,16 +120,20 @@ SKILL_ALIASES: dict[str, str] = {
                   "clarify sharpen visual-craft design-review redesign "
                   "chat composer input box message bubble thread surface "
                   "screen widget panel control affordance",
-    # ---------------------------------------------------- your own projects
+    # ---------------------------------------------------- project-specific skills
     # A project-specific skill must never win a GENERIC request on the strength
     # of a shared adjective. Measured 2026-10-05: "enhance enrich revamp overhaul
-    # the chat composer" put jitinnair-portfolio-revamp at #1 on the bare words
+    # the chat composer" put a project-skill at #1 on the bare words
     # "revamp"/"overhaul" — its description contains "UX overhaul" — while the
     # skills that would actually help (impeccable, emil-design-eng,
     # frontend-design) scored nothing at all because none of them contain the
     # word "chat". The alias terms below give those skills the vocabulary, and
-    # demote_project_owners in router_core keeps a project skill from taking the
+    # score()'s wrong-ecosystem demotion keeps a project skill from taking the
     # top slot on a generic ask.
+    # NOTE: project-specific entries belong in the USER's own config, not in
+    # upstream. These remain because the golden set depends on them; a fresh
+    # install without these skills simply ignores unknown keys (phantom keys
+    # are audited by t_alias_coverage).
     "jitinnair-portfolio-revamp": "portfolio personal homepage showcase "
                                    "case-study landing about-me",
     "jitinnair-ui": "component registry brand on-brand house-style "

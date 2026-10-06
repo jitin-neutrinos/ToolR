@@ -1,32 +1,69 @@
-# tool-router
+# ToolR
+
+<p align="center">
+  <img src="assets/toolr-wordmark.png" alt="ToolR wordmark" width="480">
+</p>
 
 Pick the right skills, MCP servers, subagents and commands *before* doing the
 work — from a scored index of what is actually installed, not from memory.
 
-Built for the case where a harness has hundreds of skills installed. The model
-is supposed to see one description line each — but that listing is *budgeted*.
-Claude Code allots ~1% of the context window (8,000 chars by default) to the
-whole skill listing; on a box with 400 skills the **names alone** consume 7,897
-of those characters, so nearly every description is dropped and native
-selection degrades to name matching. (Check yours with `/context` and
-`/skill-doctor`; raise it with `skillListingBudgetFraction` or
-`SLASH_COMMAND_TOOL_CHAR_BUDGET` — a full 400-skill listing would need ~35k
-tokens, which is why the budget exists.)
+## Why
 
-`tool-router` reads the descriptions off disk instead, where nothing is
-truncated: it indexes every capability, scores them against the request and the
-repo's stack, and hands the model a short routing card — what to load, what the
-request actually asks for, and what to confirm before running.
+Every harness has a skill-discovery budget. Claude Code allots ~1% of the
+context window to the whole skill listing; past a few dozen skills the
+descriptions are truncated or dropped (least-invoked first), selection degrades
+to name matching, and studies show pass rates falling −8…−21pp as the skill
+count grows past ~50. The same trap exists for MCP tools: accuracy collapses
+past 30–50 visible tools, and Anthropic's own tool search returns only ~34–56%
+retrieval accuracy in independent tests at scale.
 
-Pure stdlib Python 3.9+. No API key, no embedding model, no daemon.
-~3 ms per request over 500 capabilities.
+ToolR reads the descriptions off disk instead, where nothing is truncated. It
+indexes every capability, scores them against the request (BM25 + local
+embeddings fused, plus a capability-alias vocabulary bridge), and hands the
+model a short **routing card** — what to load, what the request actually asks
+for, and what to confirm before running. It runs on every prompt, in ~0.2 s,
+with no API calls on the hot path.
+
+**Measured on its own 454-query golden set:** recall@1 0.18, recall@10 0.44,
+MRR 0.27 — and every change is gated on that set before it ships (see
+`eval/`).
+
+## How it compares
+
+| | **ToolR** | skill-search-mcp | Skill Context Manager | Native tool search (Claude/Codex) |
+|---|---|---|---|---|
+| Harnesses | **6+ (Claude, Codex, Gemini, Cursor, OpenCode, OpenClaw, ~/.agents)** | Claude Code | One harness | One harness |
+| Routes… | **skills + MCPs + subagents + commands** | skills only | skills only | MCP tools only |
+| Method | **BM25 + dense embeddings (convex fusion) + alias bridge** | vector search | BM25 + embeddings + reranker | regex / BM25 |
+| Vocabulary bridging | **yes — plain English → library names** ("frosted" → glassmorphism) | implicit in vectors | partial | none |
+| Body + trigger indexing | **yes** (skill bodies, Use-when clauses, trigger phrases) | descriptions only | descriptions only | tool descriptions only |
+| Install surface | **one curl\|sh line; hook-native, no MCP registration** | pipx + claude mcp add + reindex | MCP server | built-in |
+| Card, not just picks | **yes — restate/load/gate contract** | tool list | tool list | schemas |
+| Sourcing stage (find missing capabilities, HITL) | **yes** | no | no | no |
+| Eval harness included | **yes (golden set + ablation + robustness)** | benchmark numbers | no | vendor evals |
+
+Native tool search is complementary, not a replacement: it hides MCP tool
+schemas; ToolR decides what the agent should *load* across all capability kinds.
 
 ## Install
 
 ```bash
-git clone https://github.com/notjitin/tool-router ~/tool-router
-python3 ~/tool-router/install.py --check     # see what's detected
-python3 ~/tool-router/install.py             # install into every harness found
+curl -fsSL https://toolr.jitinnair.com/install.sh | bash
+```
+
+The installer detects every harness on the machine — Claude Code, Codex CLI,
+Gemini CLI, Antigravity, Cursor, OpenCode, OpenClaw, and the shared
+`~/.agents` location, even when only their config directories exist — and
+installs into all of them: skill, prompt hook, and the "route before you work"
+mandate. A step-by-step TUI shows exactly what it found and changed.
+
+Manual install:
+
+```bash
+git clone https://github.com/jitin-neutrinos/ToolR ~/toolr
+python3 ~/toolr/install.py --check       # see what's detected, change nothing
+python3 ~/toolr/install.py               # install into every harness found
+python3 ~/toolr/toolr_install.py --demo  # preview the TUI, change nothing
 ```
 
 `--check` changes nothing. A real install symlinks the skill into each detected
@@ -55,7 +92,8 @@ that shape is the documented infinite-loop trap.
 | Codex CLI | `~/.agents/skills/` | automatic (`UserPromptSubmit`, needs `[features] hooks=true`) |
 | Gemini CLI | `~/.gemini/skills/` | automatic (`BeforeAgent`) |
 | Cursor | `~/.cursor/skills/` | session-start protocol; agent runs `route` per turn |
-| OpenCode | `~/.config/opencode/skills/` | skill protocol (a `chat.message` plugin could automate it) |
+| OpenCode | `~/.config/opencode/skills/` | automatic (`chat.message` plugin) |
+| Antigravity (agy) | `~/.gemini/config/skills/` | skill protocol (no per-prompt hook exists) |
 | OpenClaw | `~/.openclaw/skills/` | skill protocol |
 
 Paths and hook contracts: [`references/harnesses.md`](references/harnesses.md).
@@ -67,15 +105,15 @@ turn and the model follows it. Anywhere else, or to route a rephrased request:
 
 ```bash
 ~/.tool-router/route "the postgres query on the dashboard is slow"
-~/.tool-router/index --cwd . --list      # rebuild + show the inventory
-~/.tool-router/route --record tdd        # remember what actually helped here
-~/.tool-router/route --selftest          # 17 assertions
+~/.tool-router/index --cwd . --list     # rebuild + show the inventory
+~/.tool-router/route --record tdd       # remember what actually helped here
+~/.tool-router/route --selftest         # 43 checks
 ```
 
 Example card:
 
 ```
-## Router card (tool-router)
+## Router card (ToolR)
 
 **Step 1 — enrich.** Restate the request in 1-3 lines before acting: goal,
 target, done-condition. ...
@@ -91,27 +129,25 @@ _indexed: 33 agent, 30 command, 10 mcp, 59 plugin-skill, 392 skill_
 
 ## The pipeline
 
-With a hook installed, every prompt runs one stage automatically:
+```
+prompt → BM25 over name+desc+aliases+bodies+triggers
+       → dense verification lane (local Ollama, advisory)
+       → convex score fusion (config fusion_alpha, default 0.5)
+       → exact-name guarantee
+       → top-10 combined card (~0.2 s, hook-native)
+```
 
-1. **Route** the raw prompt — top-10 combined picks (skills, MCPs, subagents,
-   commands): BM25 + local dense embeddings (Ollama `nomic-embed-text`) fused,
-   with a capability-alias layer that bridges plain English to library names
-   ("animate" reaches the Framer skills, "frosted" reaches glassmorphism),
-   plus a coverage line naming which capability kinds matched, so the agent
-   can say when something is missing instead of silently substituting.
-
-The prompt-engineer rewrite stage was **removed 2026-10-05** — it made a
-network call on every message and the card already names the picks, so it
-cost 2.5–5.5 s (15–18 s outliers) for nothing. The local Laya rerank is off
-by default: on the 454-query golden set it *cost* 0.017 R@1 at 4× the lane
-latency. Both stay wired behind config flags.
+Fail-open everywhere: dense lane down → BM25 alone; sourcing sweep is a
+detached background child that never blocks the card. Nothing is logged except
+picked names; prompt text never leaves the machine or hits disk beyond the
+router state dir.
 
 A number in the prompt ("top 20 tools") or `-n/--top N` replaces the default
 10, clamped 1–50; the flag wins when both are present.
 
 ## Configure
 
-`~/Work/tool-router/config.json` (all keys optional):
+`~/.tool-router/config.json` (all keys optional):
 
 ```json
 {
@@ -122,20 +158,16 @@ A number in the prompt ("top 20 tools") or `-n/--top N` replaces the default
   "budget_ms": 5000,
   "stale_hours": 24,
   "enabled": true,
-  "mcp_hints": {"my-server": "words that should surface this server"},
-  "laya_rerank": {"enabled": false, "top_n": 5, "timeout_s": 8.0}
+  "fusion_alpha": 0.5,
+  "mcp_hints": {"my-server": "words that should surface this server"}
 }
 ```
 
-The `rewriter` block is gone with the stage it configured. `laya_rerank` is
-`enabled: false` by measured default (−0.017 R@1 on the golden set); re-measure
-with `eval/ablate.py` before turning it back on.
-
-`min_score` is judged on one consistent scale after fusion (the old code
-rescaled RRF scores below the floor, silently discarding semantic-only hits —
-fixed; a regression test guards it). Breaker state lives in
-`~/.tool-router/breaker-{laya,ollama,rewriter}.json`; deleting a file clears
-that breaker. `enabled: false` silences the router without uninstalling it.
+`fusion_alpha` is config-controlled and swept against the golden set
+(`eval/ablate.py`); 0.5 shipped because it keeps recall@10 while 0.6 trades
+R@10 −0.078 for R@1 +0.017. Breaker state lives in
+`~/.tool-router/breaker-*.json`; deleting a file clears that breaker.
+`enabled: false` silences the router without uninstalling it.
 
 ## Honest limits
 
@@ -143,40 +175,53 @@ that breaker. `enabled: false` silences the router without uninstalling it.
   is no way to rewrite the user's prompt (no `updatedPrompt` exists —
   [#27365](https://github.com/anthropics/claude-code/issues/27365)). The card is
   advice plus evidence; `--enforce` is the only teeth available.
-- Matching is hybrid (BM25 + local dense embeddings + a capability-alias
-  layer), but a request sharing no vocabulary with a skill's description can
-  still miss it. Research on
-  skill retrieval at scale ([SkillRouter](https://arxiv.org/abs/2603.22455))
-  finds the skill *body* is the decisive signal — indexing bodies with an
-  embedding model is the upgrade path if description-level routing plateaus.
-- Only names, descriptions and alias terms are indexed, never skill bodies.
+- Matching is hybrid, but a request sharing no vocabulary with any description
+  can still miss. Extend `scripts/aliases.py` — it is the front line, and
+  `coverage_report()` flags phantom keys (alias keys matching no live
+  capability). Skill bodies are now indexed (first 120 words), following
+  [SkillRouter](https://arxiv.org/abs/2603.22455), which found the body is the
+  decisive signal; full-body indexing is the next lever if this plateaus.
 - Injected context accumulates for the whole session and is never freed
   ([#40216](https://github.com/anthropics/claude-code/issues/40216), closed as
-  not planned). Hence the ~900-char card, the sub-threshold silence, and the
-  160-char repeat form.
+  not planned). Hence the compact repeat-card form.
 - Cursor cannot inject context per prompt; there the protocol lands once per
-  session and the agent calls `route` itself. `additionalContext` is also
-  reported not to reach the model in the VS Code extension
-  ([#49063](https://github.com/anthropics/claude-code/issues/49063)).
-- Nothing is logged. The router reads prompts and writes only the picked skill
-  names to `~/.tool-router/last_route.json` — no prompt text leaves the machine
-  or hits disk.
+  session and the agent calls `route` itself.
+- The dense lane uses a local embedding model if Ollama is present; without it,
+  BM25-only routing still works.
+
+## Development
+
+```bash
+python3 scripts/selftest.py          # 43 checks
+python3 eval/robustness.py           # 26 adversarial checks (5 known defects)
+python3 eval/ablate.py               # lane-by-lane metrics on the golden set
+python3 eval/ablate.py --save        # append to eval/runs.jsonl
+python3 install.py --check           # detection report
+python3 toolr_install.py --demo      # TUI preview, change nothing
+```
+
+Design notes and measured post-mortems: `RESEARCH-retrieval-quality-2026-10-05.md`,
+`REVIEW-*.md`, `OPTIMIZATION-2026-10-06.md`.
 
 ## Layout
 
 ```
 SKILL.md                  the protocol the model follows
 install.py                harness detection, skill install, hook wiring
-scripts/router_core.py    discovery, indexing, scoring, card rendering
-scripts/index_build.py    build ~/.tool-router/index.json
+toolr_install.py          the branded TUI installer
+toolr_tui.py              pixel-art logo + step renderer
+assets/                   wordmark + icon (generated)
+scripts/router_core.py    discovery, indexing, scoring, fusion, card rendering
+scripts/body_extract.py   SKILL.md body/when/trigger extraction
 scripts/route.py          hook entry point and CLI
-scripts/pipeline.py       routing pipeline (route -> merge; rewrite stage removed 2026-10-05)
-scripts/rewriter.py       removed rewrite stage, kept on disk for reference
+scripts/pipeline.py       routing pipeline
 scripts/aliases.py        capability-alias + concept-term vocabulary bridge
 scripts/dense_index.py    local-embedding dense lane (Ollama nomic-embed-text)
+scripts/source.py         registry sourcing (HITL)
 scripts/session_card.py   session-start fallback (Cursor)
 scripts/gate.py           optional PreToolUse enforcement (--enforce)
 scripts/selftest.py       runnable checks
+eval/                     golden set, ablation, robustness, active learning
 references/harnesses.md   verified per-harness paths, hooks, MCP formats
 ```
 

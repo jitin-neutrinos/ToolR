@@ -51,7 +51,8 @@ PAID_RX = re.compile(
     r"\b(paid|subscription|pricing|per[- ]month|/mo\b|free trial|requires.{0,20}api[_ ]?key|"
     r"api[_ ]?key required|upgrade to|pro plan|enterprise plan|credit card)\b", re.I)
 
-SCRATCH = Path("/home/notjitin/.hermes/cache/scratch/tool-router-source")
+SCRATCH = Path(os.path.expanduser(os.environ.get(
+    "TOOLR_SCRATCH", "~/.local/share/toolr/scratch/source")))
 
 
 def _log(event: dict) -> None:

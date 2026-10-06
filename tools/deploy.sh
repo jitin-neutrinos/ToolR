@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Publish the ToolR installer to the static web directory served at toolr.jitinnair.com.
+#
+#   bash tools/deploy.sh            # build + publish + verify
+#   bash tools/deploy.sh --dry-run  # show what it would publish
+#
+# What it produces in $WWW_DIR:
+#   toolr-<version>.tar.gz     the pack (install.py, scripts/, SKILL.md, TUI)
+#   SHA256SUMS                 checksums the archive hash
+#   install.sh                 the one-command bootstrap
+#   toolr-icon.png             the repo icon
+#
+# Served by toolr-www.service (127.0.0.1:8030) behind the existing cloudflared
+# tunnel. Nothing here touches the tunnel or DNS.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WWW_DIR="${WWW_DIR:-$HOME/Work/toolr-www}"
+PORT="${PORT:-8030}"
+DRY=0
+[ "${1:-}" = "--dry-run" ] && DRY=1
+
+say() { printf '\033[1m%s\033[0m\n' "$*"; }
+
+VERSION="$(date -u +%Y%m%d)"
+HASH="$(git -C "$REPO" rev-parse --short=8 HEAD 2>/dev/null || echo nohash)"
+STAMP="${VERSION}-${HASH}"
+say "Publishing ToolR ${STAMP} -> $WWW_DIR"
+
+PAYLOAD=(SKILL.md install.py install.sh toolr_install.py toolr_tui.py scripts references README.md assets/toolr-icon.png)
+
+ARCHIVE="$WWW_DIR/toolr-${STAMP}.tar.gz"
+mkdir -p "$WWW_DIR"
+TARLIST="$(mktemp)"
+for f in "${PAYLOAD[@]}"; do
+  [ -e "$REPO/$f" ] || { echo "missing payload: $f" >&2; exit 1; }
+  echo "$f" >> "$TARLIST"
+done
+if [ "$DRY" = 1 ]; then
+  say "--dry-run: would publish"
+  cat "$TARLIST" | sed 's/^/    /'
+  echo "    -> ${ARCHIVE}"
+  rm -f "$TARLIST"
+  exit 0
+fi
+tar -czf "$ARCHIVE" -C "$REPO" -T "$TARLIST"
+rm -f "$TARLIST"
+
+(
+  cd "$WWW_DIR"
+  sha256sum "toolr-${STAMP}.tar.gz" > SHA256SUMS
+  cp "$REPO/install.sh" install.sh
+  chmod +x install.sh
+  cp "$REPO/assets/toolr-icon.png" toolr-icon.png
+)
+
+say "Published:"
+ls -la "$WWW_DIR"
+say "Verify: curl -fsSL http://127.0.0.1:${PORT}/install.sh | head -3"

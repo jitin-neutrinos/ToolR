@@ -190,6 +190,27 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     else:
         n = int(cfg.get("top_n", DEFAULT_N))
         asked_for_count = False
+    # Model-aware card size + authority check (both fail-open, ~ms).
+    model_decision = None
+    try:
+        import modelcontext as mc
+        profile = mc.resolve()
+        model_decision = mc.decision(profile, user_n=n if asked_for_count else None, cfg=cfg)
+        # Cap the default path at the model-derived count; an explicit user
+        # count always wins (decision() already returns it unchanged).
+        n = max(1, min(n, model_decision["max_picks"])
+                if not asked_for_count else n)
+    except Exception:
+        pass  # resolver must never break routing
+    authority_ok = True
+    authority_note = ""
+    try:
+        import authority as _auth
+        authority_ok = _auth.ensure_authority()
+        if not authority_ok:
+            authority_note = _auth.card_notice()
+    except Exception:
+        pass
     t0 = time.monotonic()
 
     def elapsed_ms() -> float:
@@ -238,6 +259,11 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
 
     card = rc.render_pipeline_card(prompt, rewritten, provider, merged_picks,
                                    picks1, n, stack, cfg, index.get("stats", {}))
+    # One-line model context + authority status appended (cheap, informative).
+    if model_decision:
+        card += f"\n\n_Model: {model_decision['line']}_"
+    if authority_note:
+        card += f"\n\n{authority_note}"
     names = [f"{kind}:{name}" for kind, name in
              ((r['kind'], r['name']) for r in merged_picks)]
 
