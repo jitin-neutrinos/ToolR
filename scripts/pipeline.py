@@ -61,7 +61,8 @@ def _route_once(prompt: str, index: dict, stack: list[str], cfg: dict,
     try:
         import dense_index as di
         dense_hashes = di.dense_rank(prompt, index, dense_path, top_n=50)
-        ranked = rc.fuse(ranked, dense_hashes, index)
+        ranked = rc.fuse(ranked, dense_hashes, index,
+                         alpha=cfg.get("fusion_alpha"))
     except Exception:
         pass  # fusion needs the dense lane; BM25 order stands without it
     # laya rerank (advisory, margin-gated)
@@ -77,9 +78,19 @@ def _route_once(prompt: str, index: dict, stack: list[str], cfg: dict,
     return ranked
 
 
-def _top_combined(ranked: list[dict], cfg: dict, n: int) -> list[dict]:
+def _top_combined(ranked: list[dict], cfg: dict, n: int,
+                   topup: bool = False) -> list[dict]:
     """Top-N across all capability kinds with a per-kind quota, so MCPs/
-    agents/commands get guaranteed slots instead of skill leftovers."""
+    agents/commands get guaranteed slots instead of skill leftovers.
+
+    topup=True honours the count contract (an explicitly requested N must
+    yield N picks, topping up with sub-floor rows). It is OFF by default and
+    must stay off for the default-10 path: on the hook path nobody asked for
+    N, so the min_score floor is the answer, and a prompt naming no routable
+    capability has to abstain rather than be handed ten weak picks
+    (regression: 'what is the meaning of life ... bowline knot' scored 0.25
+    against a 0.28 floor and the top-up still emitted it — see
+    eval/robustness.py::t_no_capability_abstains)."""
     picks = [r for r in ranked if r.get("score", 0) >= float(
         cfg.get("min_score", rc.DEFAULT_CONFIG["min_score"]))]
     if picks:
@@ -113,12 +124,18 @@ def _top_combined(ranked: list[dict], cfg: dict, n: int) -> list[dict]:
         if key not in seen_keys:
             out.append(r)
             seen_keys.add(key)
-    # Top-up: a request for N must yield N when the corpus has N candidates.
-    # Measured 2026-10-05: "top 20 skills" returned 19 because the tail cut and
-    # the min_score floor removed real candidates. Under-filling is worse than
-    # admitting a weak match — the caller asked for a count, so give it, and the
-    # card already shows the score so a weak tail pick is visible as such.
-    if len(out) < n and ranked:
+    # Top-up: an EXPLICIT request for N must yield N when the corpus has N
+    # candidates. Measured 2026-10-05: "top 20 skills" returned 19 because the
+    # tail cut and the min_score floor removed real candidates. Under-filling
+    # is worse than admitting a weak match — the caller asked for a count, so
+    # give it, and the card already shows the score so a weak tail pick is
+    # visible as such.
+    #
+    # topup is deliberately opt-in. When nobody named a count (the default-10
+    # hook path) the floor is the contract and abstention wins: topping up
+    # there turned "no routable capability" into ten sub-floor picks, which
+    # is the bug eval/robustness.py::t_no_capability_abstains pins.
+    if topup and len(out) < n and ranked:
         for r in ranked:
             if len(out) >= n:
                 break
@@ -160,10 +177,19 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     dense_path = rc.index_path().parent / (rc.index_path().stem + ".dense.npz")
     stack = rc.stack_tokens(cwd)
     # Explicit --top N beats a number named in the prompt, which beats config.
+    # asked_for_count records whether the COUNT came from the user (flag or
+    # prompt text) rather than from the default — that is what turns the
+    # sub-floor top-up on. cfg["top_n"] is a default, not a request.
+    prompt_n = user_n(prompt)
     if n_override is not None:
         n = max(1, min(int(n_override), MAX_N))
+        asked_for_count = True
+    elif prompt_n is not None:
+        n = prompt_n
+        asked_for_count = True
     else:
-        n = user_n(prompt) or int(cfg.get("top_n", DEFAULT_N))
+        n = int(cfg.get("top_n", DEFAULT_N))
+        asked_for_count = False
     t0 = time.monotonic()
 
     def elapsed_ms() -> float:
@@ -174,7 +200,7 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
 
     # Stage 1 — first-pass route
     ranked1 = _route_once(prompt, index, stack, cfg, dense_path, n)
-    picks1 = _top_combined(ranked1, cfg, n)
+    picks1 = _top_combined(ranked1, cfg, n, topup=asked_for_count)
 
     # Stage 2 — PROMPT REWRITER: REMOVED (owner decision 2026-10-05).
     #
@@ -202,7 +228,7 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
         if budget_left() > 400:
             ranked2 = _route_once(rewritten, index, stack, cfg, dense_path, n,
                                   rerank=False)
-            picks2 = _top_combined(ranked2, cfg, n)
+            picks2 = _top_combined(ranked2, cfg, n, topup=asked_for_count)
             # Stage 4 — union, first-pass order for stable names, second-pass additions after
             seen = {(r.get("kind"), r.get("name")) for r in picks1}
             merged_picks = (picks1 + [r for r in picks2

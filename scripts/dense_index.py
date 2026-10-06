@@ -105,8 +105,14 @@ def build_dense(index: dict, dense_path: Path) -> dict:
         # BM25 but the dense fusion pushed them out of the top 20 entirely).
         _alias = it.get("aliases") or []
         _tail = (" " + " ".join(_alias[:24])) if _alias else ""
+        # Body signals ride along too: the dense lane must consume the SAME
+        # enriched text as BM25 (measured 2026-10-05 — enriching one lane and
+        # not the other makes fusion counterproductive).
+        _body = (" " + it.get("body", "")) if it.get("body") else ""
+        _when = (" " + it.get("when", "")) if it.get("when") else ""
+        _trig = (" " + it.get("triggers", "")) if it.get("triggers") else ""
         texts.append(f"{it.get('kind', '')}: {it.get('name', '')}. "
-                     f"{it.get('desc', '')}{_tail}")
+                     f"{it.get('desc', '')}{_tail}{_body}{_when}{_trig}")
 
     keep_h, keep_v = [], []
     if old_meta.get("hashes") and dense_path.with_suffix(".npz").is_file():

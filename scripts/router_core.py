@@ -424,6 +424,30 @@ def discover_fleet_assets() -> list[dict]:
     return items
 
 
+def _enrich_from_body(it: dict) -> None:
+    """Read the item's file body and add index-side signals (in place).
+
+    Index-side description expansion (TOOL-REX, ICLR 2026) + body indexing
+    (SkillRouter): the SKILL.md body is the decisive retrieval signal, and the
+    "Use when ..." trigger clause plus quoted trigger phrases in the
+    description carry the words real requests use. All stdlib, fail-open: an
+    unreadable file leaves the item exactly as discovery built it.
+    """
+    path = it.get("path") or ""
+    if not path or not path.endswith(".md"):
+        return
+    try:
+        from body_extract import extract_body, extract_triggers, extract_when
+        text = read_head(Path(path), 20000)
+        if not text:
+            return
+        it["body"] = extract_body(text)
+        it["when"] = extract_when(it.get("desc", ""))
+        it["triggers"] = extract_triggers(it.get("desc", ""))
+    except Exception:
+        return  # fail-open: body signals are additive, never load-bearing
+
+
 def build_index(cwd: Path) -> dict:
     items = (
         discover_skills(cwd)
@@ -434,7 +458,10 @@ def build_index(cwd: Path) -> dict:
         + discover_fleet_assets()
     )
     for it in items:
-        it["tokens"] = tokenize(" ".join((it["name"], it["desc"], it["extra"])))
+        _enrich_from_body(it)
+        it["tokens"] = tokenize(" ".join((it["name"], it["desc"], it["extra"],
+                                          it.get("body", ""), it.get("when", ""),
+                                          it.get("triggers", ""))))
         it["name_tokens"] = tokenize(it["name"])
         # Vocabulary bridge: bake each capability's alias terms into its tokens
         # so BM25, the dense lane and Laya all see them. Applied here, at index
@@ -904,19 +931,27 @@ def _dense_hash_of(item: dict) -> str:
 
 
 def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
-         k: int = 60, top_n: int = 50) -> list[dict]:
-    """RRF-fuse the BM25 ranking with the dense (embedding) ranking.
+         k: int = 60, top_n: int = 50, alpha: float | None = None) -> list[dict]:
+    """Fuse the BM25 ranking with the dense (embedding) ranking.
 
-    Scale contract (the bug this replaced): the BM25 *relative* score stays the
-    only score `select()` thresholds on. Dense-ranked items that BM25 never
-    scored get an additive dense bonus proportional to their dense rank, on the
-    same relative scale — so a pure-semantic hit CAN clear min_score (that was
-    impossible under the old `RRF*10` rescale, whose ceiling ~0.33 sat below
-    the 0.28 floor, silently discarding every dense-only discovery).
+    Fusion is a CONVEX COMBINATION of per-query-normalised scores (TM2C2,
+    Bruch/Gai/Ingber, ACM TOIS 42(1), arXiv:2210.11934): alpha * dense_n +
+    (1-alpha) * bm25_n. `alpha` comes from config (`fusion_alpha`, swept on the
+    golden set — see eval/), else index["fusion_alpha"], else the default.
+    Unlike RRF the fused value IS the score select() cuts on — one ordering,
+    not two.
 
-    Rows are annotated: `dense_hit` (in dense top-N), `dense_rank`, `fused`.
-    Order: by fused RRF key first (BM25 rank + dense rank agreement wins),
-    with each row keeping a score `select()` can compare across the list.
+    Scale contract (kept from the RRF era): the fused score stays on the
+    BM25-relative scale (0..~1.4). A dense-only discovery — BM25 never scored
+    it — enters through a dense-only fallback arm so it can still clear
+    min_score; the RRF*10 bug (ceiling 0.33 < floor 0.28) stays dead.
+
+    Exact-name guarantee (Codex CLI #21503 class): a prompt that names a
+    capability exactly keeps that item in the output regardless of where the
+    fusion puts it — the rank blend can bury an exact match behind noisy
+    arms, and the caller asked for that item BY NAME.
+
+    Rows are annotated: `dense_hit`, `dense_rank`, `fused` (the blended value).
     """
     if not dense_hashes or not index.get("items"):
         return bm25_rows
@@ -940,22 +975,41 @@ def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
 
     keys = set(bm25_pos) | set(dense_pos)
 
-    def rrf(key) -> float:
-        s = 0.0
-        i = bm25_pos.get(key)
-        if i is not None:
-            s += 1.0 / (k + i + 1)
-        j = dense_pos.get(key)
-        if j is not None:
-            s += 1.0 / (k + j + 1)
-        return s
-
-    # dense bonus on the BM25-relative scale: dense #1 earns +0.35, fading to
-    # ~0 by dense rank 50. Tuned so a dense-only top hit clears the default
-    # min_score (0.28) on its own, but cannot outrank a strong BM25 match
-    # (relative scores there run 0.5–2.5) without agreement.
+    # TM2C2: theoretical min-max normalisation per arm, per query.
+    # BM25 relative scores are >= 0 by construction (floor 0). Cosine is in
+    # [-1, 1]; use its theoretical infimum so the normalisation has no
+    # data-dependent statistic (Bruch Theorem 4.5 — more robust across domains).
+    bm25_scores = [float(bm25_row[key].get("score", 0.0)) for key in keys if key in bm25_pos]
+    bm25_max = max(bm25_scores) if bm25_scores else 1.0
+    bm25_min = min(bm25_scores) if bm25_scores else 0.0
+    if bm25_max - bm25_min < 1e-9:
+        bm25_max = bm25_min + 1.0
     n_dense = max(len(dense_rank_map), 1)
+    dense_max = n_dense - 1
 
+    def dense_cos_n(key) -> float:
+        """Dense arm on a 0..1 scale: rank position, inverted. (Rank-based
+        because dense_rank returns hashes, not cosines; min-max of ranks.)"""
+        j = dense_pos.get(key)
+        if j is None:
+            return 0.0
+        return 1.0 - (j / max(dense_max, 1)) if dense_max > 0 else 1.0
+
+    def bm25_n(key) -> float:
+        if key not in bm25_pos:
+            return 0.0
+        s = float(bm25_row[key].get("score", 0.0))
+        return (s - bm25_min) / (bm25_max - bm25_min)
+
+    if alpha is None:
+        alpha = float(index.get("fusion_alpha", _FUSION_ALPHA_DEFAULT))
+    alpha = min(max(alpha, 0.0), 1.0)
+
+    def fused(key) -> float:
+        return alpha * dense_cos_n(key) + (1.0 - alpha) * bm25_n(key)
+
+    # dense-only fallback arm: a discovery the lexical lane never scored keeps
+    # a thresholdable score on the BM25-relative scale, fading with dense rank
     def dense_bonus(key) -> float:
         j = dense_pos.get(key)
         if j is None:
@@ -964,7 +1018,7 @@ def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
 
     out = []
     seen = set()
-    for key in sorted(keys, key=lambda kk: (-rrf(kk), -(dense_bonus(kk)))):
+    for key in sorted(keys, key=lambda kk: (-fused(kk), -(dense_bonus(kk)))):
         row = bm25_row.get(key) or item_lookup.get(key)
         if row is None:
             continue
@@ -981,18 +1035,67 @@ def fuse(bm25_rows: list[dict], dense_hashes: list[str], index: dict,
         # fuse() rebuilds hits, so the adjective-only label from score() is lost
         # here. Re-derive it from the BM25 row's own hits, or the card silently
         # stops telling the reader WHY a pick is weak.
+        #
+        # "Topical" means a hit against the capability's IDENTITY fields
+        # (name/description/aliases). A hit that exists only because the
+        # indexed BODY mentions the word (2026-10-06: the portfolio skill's
+        # body says "hermes chat", so "chat composer" queries produced a
+        # 'chat' hit and the row looked topical while still being carried by
+        # "revamp"/"overhaul") is not identity evidence. The identity token
+        # set is recomputed from the fields that existed before body
+        # indexing; body-only hits stay in `hits` for display but do not
+        # clear the adjective-only flag.
         if not row.get("adjective_only"):
             _h = (bm25_row.get(key) or {}).get("hits") or []
-            _topical = [h for h in _h if h not in DEMOTE_TIE and h != "adjective-only"]
+            _it = item_lookup.get(key) or {}
+            _ident = set(_it.get("name_tokens") or [])
+            _ident.update(tokenize(" ".join((_it.get("desc", ""), _it.get("extra", ""),
+                                             " ".join(_it.get("aliases") or [])))))
+            _topical = [h for h in _h
+                        if h not in DEMOTE_TIE and h != "adjective-only" and h in _ident]
             if _h and not _topical:
                 row["adjective_only"] = True
                 row["hits"] = list(_h) + ["adjective-only"]
-        row["fused"] = round(rrf(key), 5)
+        row["fused"] = round(fused(key), 5)
         row["dense_hit"] = key in dense_pos
         if row["dense_hit"]:
             row["dense_rank"] = dense_pos[key]
         out.append(row)
+
+    # Exact-name guarantee: the fused ordering must not bury a capability the
+    # prompt names by its exact name. Walk the FULL fused list (not just the
+    # head — the guarantee is against burying, not against the top-1 slot).
+    prompt_l = (bm25_rows[0].get("_prompt_l", "") if bm25_rows else "") or ""
+    exact = [r for r in out if _named_exactly(r, prompt_l)]
+    if exact:
+        keep = [r for r in out if r not in exact]
+        out = exact + keep
     return out
+
+
+_FUSION_ALPHA_DEFAULT = 0.5
+
+
+def _named_exactly(row: dict, prompt_l: str) -> bool:
+    """True when the prompt mentions this capability's exact name.
+
+    Mirrors score()'s own explicitness test (suppressed for one-word generic
+    names, where the mention is usually just the user's verb) so the two
+    layers cannot disagree about what counts as a mention.
+    """
+    if not prompt_l:
+        return False
+    nm = (row.get("name") or "").lower()
+    if len(nm) <= 3 or not nm:
+        return False
+    if nm not in prompt_l:
+        return False
+    single_generic = False
+    nt = row.get("name_tokens") or []
+    single_generic = len(nt) == 1 and nt[0] in GENERIC
+    explicit = f"/{nm}" in prompt_l or re.search(
+        r"\b(?:skill|use|run|invoke)\b[^.\n]{0,20}" + re.escape(nm), prompt_l) is not None
+    return not single_generic or explicit
 
 
 def dense_hash_item_key(item: dict):
@@ -1188,7 +1291,9 @@ def load_index() -> dict | None:
     if data.get("version") != INDEX_VERSION:
         return None
     for it in data.get("items", []):
-        it.setdefault("tokens", tokenize(" ".join((it["name"], it.get("desc", ""), it.get("extra", "")))))
+        it.setdefault("tokens", tokenize(" ".join((it["name"], it.get("desc", ""), it.get("extra", ""),
+                                                   it.get("body", ""), it.get("when", ""),
+                                                   it.get("triggers", "")))))
         it.setdefault("name_tokens", tokenize(it["name"]))
         # Re-apply the alias layer. save_index() strips tokens to keep the file
         # small, so they are recomputed here on every load — and until this line

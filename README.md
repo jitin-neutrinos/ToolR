@@ -89,23 +89,25 @@ target, done-condition. ...
 _indexed: 33 agent, 30 command, 10 mcp, 59 plugin-skill, 392 skill_
 ```
 
-## The pipeline (v2)
+## The pipeline
 
-With a hook installed, every prompt runs four stages automatically:
+With a hook installed, every prompt runs one stage automatically:
 
 1. **Route** the raw prompt — top-10 combined picks (skills, MCPs, subagents,
-   commands; BM25 + semantic embeddings fused, Laya rerank with margin gating).
-2. **Prompt-engineer rewrite** — an LLM restates the request as
-   Goal / Target / Done-when / Steps / Verify (never adds scope). Providers,
-   in order: Gemini (`GOOGLE_API_KEY`), then any OpenAI-compatible endpoint via
-   `ROUTER_REWRITE_BASE_URL` / `ROUTER_REWRITE_API_KEY` / `ROUTER_REWRITE_MODEL`.
-   Every failure is fail-open: the original prompt just routes alone.
-3. **Re-route** the rewritten prompt.
-4. **Merge + coverage** — union of both pick-sets plus a coverage line naming
-   which capability kinds matched, so the agent can say when something is
-   missing instead of silently substituting.
+   commands): BM25 + local dense embeddings (Ollama `nomic-embed-text`) fused,
+   with a capability-alias layer that bridges plain English to library names
+   ("animate" reaches the Framer skills, "frosted" reaches glassmorphism),
+   plus a coverage line naming which capability kinds matched, so the agent
+   can say when something is missing instead of silently substituting.
 
-A number in the prompt ("top 20 tools") replaces the default 10, clamped 1–50.
+The prompt-engineer rewrite stage was **removed 2026-10-05** — it made a
+network call on every message and the card already names the picks, so it
+cost 2.5–5.5 s (15–18 s outliers) for nothing. The local Laya rerank is off
+by default: on the 454-query golden set it *cost* 0.017 R@1 at 4× the lane
+latency. Both stay wired behind config flags.
+
+A number in the prompt ("top 20 tools") or `-n/--top N` replaces the default
+10, clamped 1–50; the flag wins when both are present.
 
 ## Configure
 
@@ -117,13 +119,17 @@ A number in the prompt ("top 20 tools") replaces the default 10, clamped 1–50.
   "min_score": 0.28,
   "tail_ratio": 0.55,
   "top_n": 10,
+  "budget_ms": 5000,
   "stale_hours": 24,
   "enabled": true,
   "mcp_hints": {"my-server": "words that should surface this server"},
-  "rewriter": {"enabled": true, "timeout_s": 12.0, "min_chars": 12, "max_chars": 4000},
-  "laya_rerank": {"enabled": true, "top_n": 5, "timeout_s": 0.6}
+  "laya_rerank": {"enabled": false, "top_n": 5, "timeout_s": 8.0}
 }
 ```
+
+The `rewriter` block is gone with the stage it configured. `laya_rerank` is
+`enabled: false` by measured default (−0.017 R@1 on the golden set); re-measure
+with `eval/ablate.py` before turning it back on.
 
 `min_score` is judged on one consistent scale after fusion (the old code
 rescaled RRF scores below the floor, silently discarding semantic-only hits —
@@ -137,12 +143,13 @@ that breaker. `enabled: false` silences the router without uninstalling it.
   is no way to rewrite the user's prompt (no `updatedPrompt` exists —
   [#27365](https://github.com/anthropics/claude-code/issues/27365)). The card is
   advice plus evidence; `--enforce` is the only teeth available.
-- Matching is lexical (BM25 + stemming + hint lists). A request sharing no
-  vocabulary with a skill's description can still miss it. Research on
+- Matching is hybrid (BM25 + local dense embeddings + a capability-alias
+  layer), but a request sharing no vocabulary with a skill's description can
+  still miss it. Research on
   skill retrieval at scale ([SkillRouter](https://arxiv.org/abs/2603.22455))
   finds the skill *body* is the decisive signal — indexing bodies with an
   embedding model is the upgrade path if description-level routing plateaus.
-- Only names and descriptions are indexed, never skill bodies.
+- Only names, descriptions and alias terms are indexed, never skill bodies.
 - Injected context accumulates for the whole session and is never freed
   ([#40216](https://github.com/anthropics/claude-code/issues/40216), closed as
   not planned). Hence the ~900-char card, the sub-threshold silence, and the
@@ -163,8 +170,10 @@ install.py                harness detection, skill install, hook wiring
 scripts/router_core.py    discovery, indexing, scoring, card rendering
 scripts/index_build.py    build ~/.tool-router/index.json
 scripts/route.py          hook entry point and CLI
-scripts/pipeline.py       4-stage orchestrator (route -> rewrite -> reroute -> merge)
-scripts/rewriter.py       prompt-engineer stage (Gemini / OpenAI-compatible, fail-open)
+scripts/pipeline.py       routing pipeline (route -> merge; rewrite stage removed 2026-10-05)
+scripts/rewriter.py       removed rewrite stage, kept on disk for reference
+scripts/aliases.py        capability-alias + concept-term vocabulary bridge
+scripts/dense_index.py    local-embedding dense lane (Ollama nomic-embed-text)
 scripts/session_card.py   session-start fallback (Cursor)
 scripts/gate.py           optional PreToolUse enforcement (--enforce)
 scripts/selftest.py       runnable checks
