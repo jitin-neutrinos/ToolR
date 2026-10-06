@@ -63,6 +63,39 @@ def main() -> int:
     if args.loaded:
         state["needs_skills"] = False
         _write(state)
+        # Record the loaded pick into learned.json — the usage-prior signal
+        # (research note R7). The Skill tool's input carries the loaded name;
+        # record the CARD name (match kind-prefixed picks). A skill that is
+        # actually loaded is the strongest automatic label available.
+        try:
+            cmd = ""
+            try:
+                ti = payload.get("tool_input") or {}
+                cmd = str(ti.get("command") or ti.get("skill") or "")
+            except Exception:
+                cmd = ""
+            name = cmd.split(":")[-1].strip().lower()
+            if not name:
+                # fall back: any state pick whose name appears in the tool input
+                blob = json.dumps(payload.get("tool_input") or {}).lower()
+                for p in state.get("picks") or []:
+                    n = p.split(":")[-1].lower()
+                    if n and n in blob:
+                        name = n
+                        break
+            if name:
+                path = rc.index_path().parent / "learned.json"
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    data = {}
+                cur = float(data.get(name, 0))
+                w = 0.25
+                data[name] = min(cur + w, 2.0)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        except Exception:
+            pass  # learning must never break the hook
         return allow()
 
     if not args.check:
