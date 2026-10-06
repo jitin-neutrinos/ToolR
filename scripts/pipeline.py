@@ -152,6 +152,84 @@ def _route_ctx(picks: list[dict]) -> str:
     return ", ".join(r["name"] for r in picks[:4])
 
 
+def _adoption_adjust(depth: int) -> int:
+    """Layer 3: 24h adoption data adjusts the depth (BoR-lite prior).
+
+    eval/adoption.jsonl carries daily harvest rows (routed prompts and whether
+    a Skill load followed within 5 min). While <24h of data exists this is a
+    no-op (data collection started 2026-10-06; input flows from 2026-10-07).
+    Once ripe: high loaded-rate -> widen by 1 (the shortlist is being used);
+    low rate -> tighten by 1 (suggestions are being ignored; fewer, sharper).
+    Never adjusts below 3 or above 12.
+    """
+    try:
+        path = Path("/home/notjitin/Work/tool-router/eval/adoption.jsonl")
+        import json as _json
+        rows = [_json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+        if not rows:
+            return depth
+        span = max(r["ts"] for r in rows) - min(r["ts"] for r in rows)
+        if span < 86400:      # less than 24h collected — no input yet
+            return depth
+        rate = sum(r.get("loaded_after", 0) for r in rows) / len(rows)
+        if rate >= 0.5:
+            return min(depth + 1, 12)
+        if rate < 0.2:
+            return max(depth - 1, 3)
+        return depth
+    except Exception:
+        return depth
+
+
+def _complexity(prompt: str, sc: dict | None = None) -> int:
+    """Layer 1a: query complexity -> card depth (Adaptive-RAG shape).
+
+    Zero-ML complexity signal: intents (scaffold's pattern extraction), query
+    length and multi-part naming. simple / standard / multi-signal.
+    Returns the depth: 4 / 7 / 10.
+    """
+    try:
+        sc = sc or rc.scaffold(prompt)
+    except Exception:
+        sc = {"intents": [], "words": len((prompt or "").split())}
+    intents = len(set(sc.get("intents") or []))
+    words = int(sc.get("words") or 0)
+    parts = len(rc._PATH_RE.findall(prompt or "")) if hasattr(rc, "_PATH_RE") else 0
+    low = (prompt or "").lower()
+    multi = sum(low.count(w) > 0 for w in (" and ", " then ", " also ", " plus "))
+    score = 0
+    score += 1 if intents >= 2 else 0
+    score += 1 if intents >= 3 else 0
+    score += 1 if words > 25 else 0
+    score += 1 if parts >= 2 else 0
+    score += 1 if multi >= 1 else 0
+    if score >= 3:
+        return 10
+    if score >= 1:
+        return 7
+    return 4
+
+
+def _score_cliff(ranked: list[dict], base: float = 0.0) -> float:
+    """Layer 1b: score-cliff truncation (MagicSelector shape).
+
+    The cut is not a fixed ratio of the leader — it is where relevance
+    actually falls. Walk the ranked list; the cliff is the largest RELATIVE
+    drop between adjacent picks. Returns the score at the cliff.
+    """
+    if len(ranked) < 3:
+        return 0.0
+    best_drop, cliff_score = 0.0, 0.0
+    for i in range(1, min(len(ranked), 15)):
+        prev, cur = float(ranked[i-1].get("score", 0)), float(ranked[i].get("score", 0))
+        if prev <= 0.0:
+            continue
+        drop = (prev - cur) / prev
+        if drop > best_drop and drop > 0.35:      # a real cliff, not decay noise
+            best_drop, cliff_score = drop, cur
+    return cliff_score
+
+
 def _coverage(picks: list[dict]) -> list[str]:
     kinds = {}
     for r in picks:
@@ -221,7 +299,30 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
 
     # Stage 1 — first-pass route
     ranked1 = _route_once(prompt, index, stack, cfg, dense_path, n)
-    picks1 = _top_combined(ranked1, cfg, n, topup=asked_for_count)
+    # Layer 1: the depth n follows the query's complexity, not a fixed number.
+    # An explicit user count (--top / "top 20") still wins outright.
+    if not asked_for_count:
+        n = _adoption_adjust(_complexity(prompt))
+        if model_decision and model_decision.get("max_picks"):
+            n = min(n, int(model_decision["max_picks"]))
+    picks1_raw = _top_combined(ranked1, cfg, n, topup=asked_for_count)
+    # Layer 1b: score-cliff truncation — cut where relevance actually falls.
+    if not asked_for_count:
+        cliff = _score_cliff(picks1_raw)
+        if cliff > 0:
+            picks1_raw = [r for r in picks1_raw if float(r["score"]) >= cliff]
+    # Layer 2: diversity — drop picks redundant with an already-kept pick.
+    # Skipped when the user asked for an explicit count: the count contract
+    # (top N must return N) outranks diversity; the card prints scores, so
+    # weak/redundant tail picks are still visible for what they are.
+    picks1 = picks1_raw
+    if not asked_for_count:
+        try:
+            import diversity as _dv
+            q_toks = set(rc.tokenize(prompt))
+            picks1 = _dv.diversify(picks1_raw, q_toks)
+        except Exception:
+            pass
 
     # Stage 2 — PROMPT REWRITER: REMOVED (owner decision 2026-10-05).
     #
@@ -244,6 +345,7 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     # stage 1 already applied it to the original prompt, and a second 4 s CPU
     # call on a lightly reworded prompt bought nothing measurable (measured
     # 2026-10-05: identical picks, ~4 s saved).
+    # Stage 5 (gap tracking + sourcing tiers remain below) — uses merged_picks/n
     merged_picks = picks1
     if rewritten:
         if budget_left() > 400:
