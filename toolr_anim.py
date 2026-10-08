@@ -22,6 +22,16 @@ GREY = (140, 148, 160)
 
 
 def _tty() -> bool:
+    # Windows conhost (PS 5.1 default) needs VT processing enabled or ANSI
+    # escape codes print as garbage / stack as raw lines. Enable once, then
+    # gate every effect on isatty like before.
+    if os.name == "nt":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+        except Exception:
+            pass
     return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
 

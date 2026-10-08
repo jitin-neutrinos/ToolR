@@ -23,6 +23,10 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent
 SKILL_NAME = "tool-router"
 ROUTE = "{skill_dir}/scripts/route.py"
+# Interpreter used inside hook commands. On Windows, Store Python has no
+# python3.exe alias, so hooks must invoke the interpreter that ran this
+# installer (sys.executable survives spaces when quoted).
+PY = sys.executable if os.name == "nt" else "python3"
 MARK = "tool-router"  # how we recognize our own entries on re-run/uninstall
 
 
@@ -230,10 +234,25 @@ def install_launchers() -> Path:
     return base
 
 
+def _can_symlink() -> bool:
+    """Windows: directory symlinks need Developer Mode or admin (WinError 1314).
+    Probe once with a temp link instead of crashing mid-install."""
+    if os.name != "nt":
+        return True
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            probe = Path(td) / "probe"
+            probe.symlink_to(Path(td), target_is_directory=True)
+        return True
+    except OSError:
+        return False
+
+
 def install_skill(dest_root: Path, link: bool) -> Path:
     dest = dest_root / SKILL_NAME
     dest_root.mkdir(parents=True, exist_ok=True)
-    if link:
+    if link and _can_symlink():
         if dest.is_symlink() or dest.exists():
             if dest.is_symlink() and dest.resolve() == SRC:
                 return dest
@@ -243,6 +262,8 @@ def install_skill(dest_root: Path, link: bool) -> Path:
                 shutil.rmtree(dest)
         dest.symlink_to(SRC, target_is_directory=True)
         return dest
+    # Copy mode: Windows without symlink privilege, or --copy. Self-heal note:
+    # a copied tree doesn't auto-track the repo, so an update reminder helps.
     dest.mkdir(parents=True, exist_ok=True)
     for item in SKILL_PAYLOAD:
         s = SRC / item
@@ -290,8 +311,8 @@ def wire_claude(skill_dir: Path, remove: bool, enforce: bool = False) -> str:
     path = home("~/.claude/settings.json")
     data = load_json(path)
     hooks = data.setdefault("hooks", {})
-    route = f"python3 {ROUTE.format(skill_dir=skill_dir)} --hook"
-    gate = f"python3 {skill_dir}/scripts/gate.py"
+    route = f'"{PY}" "{ROUTE.format(skill_dir=skill_dir)}" --hook'
+    gate = f'"{PY}" "{skill_dir}/scripts/gate.py"'
     wanted = [("UserPromptSubmit", None, _hook_entry(route))]
     if enforce:
         wanted += [
@@ -335,7 +356,7 @@ def wire_codex(skill_dir: Path, remove: bool) -> str:
     path = home("~/.codex/hooks.json")
     data = load_json(path)
     lst = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
-    cmd = f"python3 {ROUTE.format(skill_dir=skill_dir)} --hook"
+    cmd = f'"{PY}" "{ROUTE.format(skill_dir=skill_dir)}" --hook'
     if remove:
         keep = [e for e in lst if MARK not in json.dumps(e)]
         if len(keep) == len(lst):
@@ -354,7 +375,7 @@ def wire_gemini(skill_dir: Path, remove: bool) -> str:
     path = home("~/.gemini/settings.json")
     data = load_json(path)
     lst = data.setdefault("hooks", {}).setdefault("BeforeAgent", [])
-    cmd = f"python3 {ROUTE.format(skill_dir=skill_dir)} --hook --event BeforeAgent"
+    cmd = f'"{PY}" "{ROUTE.format(skill_dir=skill_dir)}" --hook --event BeforeAgent'
     if remove:
         keep = [e for e in lst if MARK not in json.dumps(e)]
         if len(keep) == len(lst):
@@ -378,7 +399,7 @@ def wire_cursor(skill_dir: Path, remove: bool) -> str:
     path = home("~/.cursor/hooks.json")
     data = load_json(path)
     lst = data.setdefault("hooks", {}).setdefault("sessionStart", [])
-    cmd = f"python3 {skill_dir}/scripts/session_card.py"
+    cmd = f'"{PY}" "{skill_dir}/scripts/session_card.py"'
     if remove:
         keep = [e for e in lst if MARK not in json.dumps(e)]
         if len(keep) == len(lst):
