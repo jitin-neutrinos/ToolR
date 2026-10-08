@@ -143,20 +143,23 @@ re-route → merge + coverage, then Laya rerank + semantic lane fuse. Cards carr
 overrides the default 10; `--no-rewrite` skips the LLM stage. Failures degrade,
 never block. Breakers: `~/.tool-router/breaker-*.json` (delete to reset).
 
-**Sourcing (v2.1).** When no local capability serves the need, search the free
-registries before giving up:
+**Sourcing (v2.1, hardened 2026-10-08).** When no local capability serves the
+need, use the interactive skill finder:
 
 ```bash
-~/.tool-router/route --source "<the capability you need>"
+~/.tool-router/route --finder "<the capability you need>"
 ```
 
-Present the screened candidate table to the user and install only on their
-explicit approval (MCPs, plugins and commands are NEVER auto-installed); then
-reindex and let the fleet sync mirror it. The router may auto-install a SKILL
-only after the same need repeats 3+ times, the judge confirms no local
-capability serves it, and the candidate is free + injection-screened + 1K+
-installs — such picks are marked **Auto-sourced** on later cards: tell the
-user, and `~/.tool-router/route --source-remove <skill>` undoes one.
+Each candidate is inspected at its real SKILL.md body + scripts,
+injection-screened, IOC-scanned and typosquat-checked, and shows its commit
+SHA. Present the table to the user; install only on their explicit approval
+with `route --finder-install <n>` (pinned to the reviewed commit; refused if
+the repo moved since review; verifies the route fires afterwards). MCPs,
+plugins and commands are NEVER auto-installed. The auto lane (same need
+repeats 3+ times) additionally requires a clean body screen, zero IOC flags
+and no typosquat before it installs a free, 1K+-install skill — such picks
+are marked **Auto-sourced** on later cards: tell the user, and
+`~/.tool-router/route --source-remove <skill>` undoes one.
 
 **Config protection (config-sentinel, 2026-10-08).** NEVER rewrite a config
 file wholesale (write_file / patch / `cat >` / `cp over`). A valid-YAML subset
