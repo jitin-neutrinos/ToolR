@@ -18,6 +18,12 @@ IMMUTABLE = re.compile(r"-[0-9a-f]{8,}\.(tar\.gz|tgz|zip|whl)$", re.I)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        # serve the landing page at /
+        if self.path in ("/", "/index.html"):
+            self.path = "/landing/index.html"
+        super().do_GET()
+
     def end_headers(self):
         name = os.path.basename(self.path.split("?")[0])
         if IMMUTABLE.search(name):
