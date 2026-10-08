@@ -784,7 +784,13 @@ def t_rewriter_stage_removed():
     assert out["card"], "a card must still be produced"
     assert out["rewritten"] is None, "nothing is rewritten any more"
     assert out["provider"] is None, "no model is named any more"
-    assert elapsed < 2.0, f"route took {elapsed:.2f}s — over budget"
+    assert elapsed < 5.0, f"route took {elapsed:.2f}s — over budget"
+    # 5.0 = the production hook budget (pipeline DEFAULT_BUDGET_MS), not the
+    # old 2.0: since 2026-10-08 the corpus carries sourced skills and the
+    # decisive-gap gate no longer always skips the Laya rerank for this
+    # prompt — a real CPU rerank measures ~3.75 s and is sanctioned (local,
+    # margin-gated), unlike the removed rewriter (network). The structural
+    # asserts above are the teeth; this is the latency envelope.
     # the card must still tell the agent what to load
     assert "Load before editing" in out["card"], \
         "the card must keep the load instruction now that the rewriter is gone"
