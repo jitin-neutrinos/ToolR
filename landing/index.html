@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Toutur — route every prompt to the right skill</title>
-<meta name="description" content="Toutur sits in front of your AI coding harnesses and routes every prompt to the right skills, MCPs and agents — before work starts. One-line install.">
+<title>Toutur: route every prompt to the right skill</title>
+<meta name="description" content="Toutur sits in front of your AI coding harnesses and routes every prompt to the right skills, MCPs and agents, before work starts. One-line install.">
 <meta name="theme-color" content="#0a0a0f">
-<meta property="og:title" content="Toutur — route every prompt to the right skill">
+<meta property="og:title" content="Toutur: route every prompt to the right skill">
 <meta property="og:description" content="A local router that reads every prompt and hands your AI agent a ranked shortlist of the right skills, MCPs and subagents.">
 <meta property="og:image" content="https://toutur.jitinnair.com/toutur-icon.png">
 <meta property="og:url" content="https://toutur.jitinnair.com/">
@@ -17,14 +17,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs" type="module"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 <style>
 :root{
   --void:#0a0a0f; --midnight:#12121a; --depth:#1a1a2e;
-  --cyan:#22d3ee; --cyan-soft:rgba(34,211,238,.13);
-  --mint:#2dd4a8; --mint-soft:rgba(45,212,168,.12);
+  --blue:#22d3ee; --blue-2:#38bdf8; --blue-soft:rgba(34,211,238,.13);
   --text:#f8fafc; --muted:#939bab; --hairline:rgba(255,255,255,.08);
   --ease:cubic-bezier(.16,1,.3,1);
 }
@@ -36,17 +34,18 @@ body{background:var(--void);color:var(--text);font-family:'DM Sans',sans-serif;
 h1,h2,h3{font-family:'Playfair Display',serif;font-weight:500;letter-spacing:-.02em;line-height:1.08}
 p{color:var(--muted)}
 .wrap{max-width:1140px;margin:0 auto;padding:0 28px}
-a{color:var(--cyan);text-decoration:none}
+a{color:var(--blue);text-decoration:none}
+:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:6px}
 ::selection{background:rgba(34,211,238,.25)}
 .progress{position:fixed;top:0;left:0;height:2px;width:0%;z-index:100;
-  background:linear-gradient(90deg,var(--mint),var(--cyan))}
+  background:linear-gradient(90deg,var(--blue-2),var(--blue))}
 
 /* ---------- aurora field + texture ---------- */
 .aurora{position:fixed;inset:-20%;z-index:0;pointer-events:none;opacity:.55;
   background:
     radial-gradient(38% 32% at 18% 12%, rgba(34,211,238,.10), transparent 60%),
-    radial-gradient(34% 30% at 84% 20%, rgba(45,212,168,.08), transparent 62%),
-    radial-gradient(42% 36% at 60% 88%, rgba(34,211,238,.06), transparent 65%);
+    radial-gradient(34% 30% at 84% 20%, rgba(56,189,248,.08), transparent 62%),
+    radial-gradient(42% 36% at 60% 88%, rgba(129,140,248,.06), transparent 65%);
   filter:blur(46px)}
 .gridlines{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.4;
   background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
@@ -65,11 +64,11 @@ nav{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:50;
 nav.tight{padding:.45rem 1.05rem;background:rgba(14,14,20,.85)}
 nav .brand{font-family:'Playfair Display',serif;font-size:19px;color:var(--text);
   display:flex;align-items:center;gap:9px}
-nav .brand i{width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,var(--cyan),var(--mint));display:inline-block}
+nav .brand i{width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,var(--blue),var(--blue-2));display:inline-block}
 nav a.navlink{color:var(--muted);font-size:13.5px;transition:color .4s var(--ease)}
 nav a.navlink:hover{color:var(--text)}
 nav .cta{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--void);
-  background:linear-gradient(135deg,var(--cyan),#5eead4);padding:.36rem .85rem;border-radius:999px;
+  background:linear-gradient(135deg,var(--blue),var(--blue-2));padding:.36rem .85rem;border-radius:999px;
   transition:transform .4s var(--ease),box-shadow .4s var(--ease)}
 nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,.35)}
 
@@ -78,33 +77,30 @@ nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,
   align-items:center;position:relative;z-index:2;padding:140px 0 60px}
 .eyebrow{display:inline-flex;align-self:flex-start;align-items:center;gap:.55rem;
   font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;
-  letter-spacing:.2em;color:var(--cyan);background:var(--cyan-soft);
+  letter-spacing:.2em;color:var(--blue);background:var(--blue-soft);
   border:1px solid rgba(34,211,238,.25);padding:.38rem .85rem;border-radius:999px;width:fit-content}
-.eyebrow b{color:var(--mint);font-weight:400}
 .hero h1{font-size:clamp(2.4rem,4.4vw,3.95rem);margin:24px 0 20px;max-width:560px}
-.hero h1 em.ai{font-style:normal;color:var(--cyan)}
-.hero h1 em.hu{font-style:italic;color:var(--mint)}
+.hero h1 em{font-style:italic;color:var(--blue)}
 .hero .sub{font-size:clamp(1rem,1.3vw,1.14rem);max-width:520px;margin-bottom:36px}
-.hero .sub b{color:#c9d3de;font-weight:400}
 .install{display:flex;align-items:center;max-width:560px;border-radius:14px;overflow:hidden;
   position:relative;background:rgba(18,18,26,.85);padding:1px}
 .install::before{content:"";position:absolute;inset:-60%;
-  background:conic-gradient(from 0deg,transparent 0 335deg,var(--cyan) 350deg,var(--mint) 357deg,transparent 365deg);
+  background:conic-gradient(from 0deg,transparent 0 335deg,var(--blue) 350deg,var(--blue-2) 357deg,transparent 365deg);
   animation:spin 5.5s linear infinite}
 .install::after{content:"";position:absolute;inset:1px;border-radius:13px;background:rgba(14,14,20,.97)}
 .install > *{position:relative;z-index:1}
 @keyframes spin{to{transform:rotate(1turn)}}
-.install .prompt{color:var(--mint);padding:1rem 0 1rem 1.15rem;font-family:'JetBrains Mono',monospace;font-size:13px}
+.install .prompt{color:var(--blue);padding:1rem 0 1rem 1.15rem;font-family:'JetBrains Mono',monospace;font-size:13px}
 .install code{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);
   padding:1rem .6rem 1rem .35rem;flex:1;white-space:nowrap;overflow-x:auto}
 .copy{border:none;background:rgba(255,255,255,.07);color:#ccd6e0;cursor:pointer;
   font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:.9rem 1.1rem;
   border-left:1px solid var(--hairline);transition:all .4s var(--ease)}
-.copy:hover{color:var(--cyan);background:var(--cyan-soft)}
+.copy:hover{color:var(--blue);background:var(--blue-soft)}
 .hero-meta{display:flex;gap:30px;margin-top:32px;flex-wrap:wrap}
 .hm{display:flex;flex-direction:column;gap:2px}
 .hm b{font-family:'Playfair Display',serif;font-size:1.65rem;font-weight:500;color:var(--text)}
-.hm b i{font-style:normal;color:var(--cyan)}
+.hm b i{font-style:normal;color:var(--blue)}
 .hm span{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);
   text-transform:uppercase;letter-spacing:.14em}
 
@@ -114,17 +110,16 @@ nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,
   overflow:hidden;position:relative;z-index:2}
 .term-bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--hairline)}
 .term-bar i{width:11px;height:11px;border-radius:50%;background:#2a2a3a;display:inline-block}
-.term-bar i:first-child{background:#f87171aa}.term-bar i:nth-child(2){background:#fbbf24aa}.term-bar i:nth-child(3){background:#34d399aa}
 .term-bar span{margin-left:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
 .term-body{padding:20px 22px 26px;font-family:'JetBrains Mono',monospace;font-size:12.8px;
   line-height:1.85;min-height:340px}
 .term-body .ln{white-space:pre-wrap;word-break:break-word}
-.term-body .p{color:var(--mint)}
+.term-body .p{color:var(--blue)}
 .term-body .c{color:#e8edf4}
 .term-body .d{color:#5b6478}
-.term-body .s{color:var(--cyan)}
-.term-body .g{color:#7cd9a8}
-.cursor{display:inline-block;width:7px;height:15px;background:var(--cyan);
+.term-body .s{color:var(--blue)}
+.term-body .g{color:#7dd3fc}
+.cursor{display:inline-block;width:7px;height:15px;background:var(--blue);
   vertical-align:-2px;animation:blink 1.05s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
 
@@ -135,27 +130,27 @@ nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,
 .mq-track{display:flex;gap:56px;width:max-content;animation:mq 32s linear infinite}
 .mq-track span{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6b7688;
   text-transform:uppercase;letter-spacing:.16em;display:flex;align-items:center;gap:56px;white-space:nowrap}
-.mq-track span::after{content:"◆";color:var(--cyan);opacity:.5;font-size:9px}
+.mq-track span::after{content:"◆";color:var(--blue);opacity:.5;font-size:9px}
 @keyframes mq{to{transform:translateX(-50%)}}
 
 /* ---------- section chrome ---------- */
 section{padding:110px 0;position:relative;z-index:2}
 .sec-head{max-width:730px;margin-bottom:52px}
-.sec-head h2{font-size:clamp(1.85rem,3.4vw,2.7rem);margin:18px 0 12px}
-.sec-head h2 em.ai{font-style:normal;color:var(--cyan)}
-.sec-head h2 em.hu{font-style:italic;color:var(--mint)}
+.sec-head h2{font-size:clamp(1.85rem,3.4vw,2.7rem);margin:0 0 12px}
+.sec-head h2 em{font-style:normal;color:var(--blue)}
 
 /* ---------- bento ---------- */
 .bento{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
 .cell{border:1px solid var(--hairline);border-radius:22px;background:rgba(18,18,26,.55);
-  padding:26px;position:relative;overflow:hidden;
+  padding:26px;position:relative;overflow:hidden;box-shadow:inset 0 1px 1px rgba(255,255,255,.05);
   transition:border-color .5s var(--ease),transform .5s var(--ease)}
-.cell:hover{transform:translateY(-3px)}
+.cell:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.28)}
 .cell::before{content:"";position:absolute;inset:0;opacity:0;transition:opacity .5s var(--ease);
   background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(34,211,238,.09),transparent 45%)}
 .cell:hover::before{opacity:1}
+.cell.tint{background:radial-gradient(120% 140% at 85% 0%,rgba(34,211,238,.07),transparent 55%),rgba(18,18,26,.55)}
 .cell .tag{font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:uppercase;
-  letter-spacing:.16em;color:var(--mint);margin-bottom:12px;display:block}
+  letter-spacing:.16em;color:var(--blue);margin-bottom:12px;display:block}
 .cell h3{font-size:1.3rem;margin-bottom:10px}
 .cell p{font-size:14.5px}
 .b4{grid-column:span 4}.b3{grid-column:span 3}.b2{grid-column:span 2}
@@ -163,11 +158,11 @@ section{padding:110px 0;position:relative;z-index:2}
 .lane{display:flex;align-items:center;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12px}
 .lane .bar{height:6px;border-radius:999px;flex:1;background:rgba(255,255,255,.05);overflow:hidden;position:relative}
 .lane .bar i{position:absolute;inset:0;border-radius:999px;transform-origin:left;
-  background:linear-gradient(90deg,var(--mint),var(--cyan))}
-.lane.b .bar i{background:linear-gradient(90deg,#818cf8,var(--cyan))}
+  background:linear-gradient(90deg,var(--blue-2),var(--blue))}
+.lane.b .bar i{background:linear-gradient(90deg,#818cf8,var(--blue))}
 .lane span{color:var(--muted);min-width:78px}
 .bignum{font-family:'Playfair Display',serif;font-size:3.3rem;line-height:1;
-  background:linear-gradient(120deg,var(--cyan),var(--mint));
+  background:linear-gradient(120deg,var(--blue),var(--blue-2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
 .mono-list{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);
   line-height:2.1;margin-top:12px}
@@ -181,8 +176,45 @@ section{padding:110px 0;position:relative;z-index:2}
 .panel .cap{display:flex;align-items:baseline;gap:12px;padding:14px 18px 4px}
 .panel .cap h3{font-size:1.3rem}
 .panel .cap span{font-size:12.5px;color:var(--muted)}
-.mermaid{display:flex;justify-content:center;overflow-x:auto;padding:8px 0}
-.mermaid svg{max-width:100%}
+
+/* pipeline stepper */
+.flow{position:relative;margin-top:6px}
+.fstage{position:relative;display:grid;grid-template-columns:34px 1fr;gap:18px;padding-bottom:34px}
+.fstage:last-child{padding-bottom:0}
+.fstage::before{content:"";position:absolute;left:16px;top:38px;bottom:4px;width:1px;
+  background:linear-gradient(180deg,rgba(34,211,238,.35),rgba(255,255,255,.06))}
+.fstage:last-child::before{display:none}
+.fdot{width:33px;height:33px;border-radius:11px;border:1px solid rgba(34,211,238,.3);
+  background:rgba(34,211,238,.08);display:grid;place-items:center;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue)}
+.fstage h3{font-size:1.15rem;margin-bottom:6px}
+.fstage p{font-size:14.5px;max-width:640px}
+
+/* dependency layers */
+.layers{display:flex;flex-direction:column}
+.band{border:1px solid var(--hairline);border-radius:16px;background:rgba(18,18,26,.6);
+  padding:16px 18px;box-shadow:inset 0 1px 1px rgba(255,255,255,.04)}
+.band .blabel{font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--blue);margin-bottom:10px;display:block}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c9d3de;
+  border:1px solid var(--hairline);border-radius:999px;padding:.3rem .75rem;background:rgba(255,255,255,.03)}
+.chip.lead{border-color:rgba(34,211,238,.35);color:var(--text);background:rgba(34,211,238,.08)}
+.blink{display:flex;justify-content:center;padding:7px 0;color:var(--blue);opacity:.65;font-size:15px;line-height:1}
+.bnote{font-size:12.5px;color:var(--muted);margin-top:10px}
+
+/* one prompt, in order */
+.seq{display:flex;flex-direction:column}
+.msg{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:11px 0;
+  border-bottom:1px solid rgba(255,255,255,.045);font-size:14px}
+.msg:last-child{border-bottom:none}
+.actor{font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:.22rem .65rem;
+  border-radius:999px;border:1px solid var(--hairline);color:var(--muted)}
+.actor.t{color:var(--blue);border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)}
+.actor.m{color:#7dd3fc;border-color:rgba(56,189,248,.35);background:rgba(56,189,248,.08)}
+.msg .arr{color:var(--muted);opacity:.55}
+.msg .lbl{color:var(--muted);flex:1;min-width:200px}
+.msg .lbl b{color:var(--text);font-weight:500}
 
 /* ---------- tables ---------- */
 table{width:100%;border-collapse:collapse;margin-top:34px;font-size:14px}
@@ -192,25 +224,29 @@ td{padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.045);color:var(--
 td:first-child{color:var(--text);font-weight:500}
 tr:hover td{background:rgba(34,211,238,.035)}
 .pill{font-family:'JetBrains Mono',monospace;font-size:11px;padding:.2rem .6rem;border-radius:999px}
-.pill.ok{color:var(--mint);background:var(--mint-soft);border:1px solid rgba(45,212,168,.3)}
-.pill.note{color:var(--cyan);background:var(--cyan-soft);border:1px solid rgba(34,211,238,.3)}
+.pill.strong{color:#062a33;background:var(--blue);border:1px solid var(--blue)}
+.pill.soft{color:var(--blue);background:var(--blue-soft);border:1px solid rgba(34,211,238,.3)}
 
 /* ---------- final CTA ---------- */
 .cta-panel{border:1px solid var(--hairline);border-radius:28px;padding:64px 48px;
   text-align:center;position:relative;overflow:hidden;
   background:radial-gradient(80% 120% at 50% 0%,rgba(34,211,238,.08),transparent 60%),rgba(18,18,26,.6)}
 .cta-panel h2{font-size:clamp(1.8rem,3.2vw,2.6rem);margin-bottom:14px}
+.cta-panel h2 em{font-style:italic;color:var(--blue)}
 .cta-panel p{max-width:480px;margin:0 auto 30px}
 .big-install{display:inline-flex;align-items:center;gap:0;max-width:600px;width:100%;
   border-radius:14px;overflow:hidden;position:relative;background:rgba(18,18,26,.9);padding:1px}
 .big-install::before{content:"";position:absolute;inset:-60%;
-  background:conic-gradient(from 0deg,transparent 0 335deg,var(--cyan) 350deg,var(--mint) 357deg,transparent 365deg);
+  background:conic-gradient(from 0deg,transparent 0 335deg,var(--blue) 350deg,var(--blue-2) 357deg,transparent 365deg);
   animation:spin 5.5s linear infinite}
 .big-install::after{content:"";position:absolute;inset:1px;border-radius:13px;background:rgba(14,14,20,.97)}
 .big-install > *{position:relative;z-index:1}
 
-/* ---------- reveal ---------- */
-.rv{opacity:0}
+/* ---------- reveal ----------
+   Gated on html.anim: the GSAP choreography adds the class only after it
+   confirms rAF is ticking. A backgrounded/throttled tab never animates and
+   never hides content — .rv elements simply render visible and static. */
+.anim .rv{opacity:0}
 
 footer{border-top:1px solid var(--hairline);padding:46px 0 64px;margin-top:30px;position:relative;z-index:2}
 footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:18px;align-items:center}
@@ -239,10 +275,14 @@ footer .links{display:flex;gap:20px;font-size:13px}
   .mq-track{gap:28px}.mq-track span{gap:28px;font-size:11px}
   .bignum{font-size:2.6rem}
   .lane span{min-width:60px;font-size:10.5px}
+  .fstage{grid-template-columns:30px 1fr;gap:14px}
+  .fdot{width:29px;height:29px}
+  .fstage::before{left:14px}
+  .msg .lbl{min-width:100%}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important}
-  .rv{opacity:1}
+  .anim .rv{opacity:1}
   .install::before,.big-install::before{display:none}
 }
 </style>
@@ -262,9 +302,9 @@ footer .links{display:flex;gap:20px;font-size:13px}
 
 <header class="hero wrap">
   <div class="hero-copy">
-    <span class="eyebrow rv">One install · <b>every harness</b> · every prompt</span>
-    <h1 class="rv">Your AI has hundreds of tools. Toutur makes it <em class="hu">choose</em> like it <em class="ai">knows</em> them.</h1>
-    <p class="sub rv">Toutur reads every prompt the moment it arrives — on your machine, in ~250&nbsp;ms — and hands your agent a ranked shortlist of the skills, MCPs and subagents that actually fit. <b>It learns from what gets used, heals its own wiring after harness updates, and stays silent when nothing fits.</b></p>
+    <span class="eyebrow rv">One install, every harness, every prompt</span>
+    <h1 class="rv">Your AI has hundreds of tools. Toutur makes it choose like it <em>knows</em> them.</h1>
+    <p class="sub rv">Reads every prompt locally, routes in about 250&nbsp;ms, and hands your agent the skills, MCPs and subagents that actually fit.</p>
     <div class="install rv">
       <span class="prompt">$</span>
       <code id="cmd-unix">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</code>
@@ -274,12 +314,12 @@ footer .links{display:flex;gap:20px;font-size:13px}
       <div class="hm"><b data-count="777">0</b><span>capabilities indexed</span></div>
       <div class="hm"><b>&lt;<i>300</i>ms</b><span>warm route</span></div>
       <div class="hm"><b data-count="8">0</b><span>harnesses wired</span></div>
-      <div class="hm"><b data-count="44">0</b><span>self-checks green</span></div>
+      <div class="hm"><b data-count="44">0</b><span>self-checks passing</span></div>
     </div>
   </div>
 
   <div class="term rv" aria-label="Toutur routing demo">
-    <div class="term-bar"><i></i><i></i><i></i><span>~/.tool-router/route — live</span></div>
+    <div class="term-bar"><i></i><i></i><i></i><span>~/.tool-router/route · live</span></div>
     <div class="term-body" id="termdemo"></div>
   </div>
 </header>
@@ -293,16 +333,15 @@ footer .links{display:flex;gap:20px;font-size:13px}
 
 <section id="how" class="wrap">
   <div class="sec-head rv">
-    <span class="eyebrow">Plain English</span>
-    <h2>A concierge between <em class="hu">you</em> and <em class="ai">your agents</em></h2>
-    <p>You describe the job in your own words. Toutur quietly slips the assistant a note — exactly which of its tools fit this job, ranked, with reasons. Nothing fits? It says nothing.</p>
+    <h2>A concierge between <em>you and your agents</em></h2>
+    <p>You describe the job in your own words. Toutur quietly slips the assistant a note: exactly which of its tools fit this job, ranked, with reasons. Nothing fits? It says nothing.</p>
   </div>
 
   <div class="bento">
     <div class="cell b4 rv">
       <span class="tag">Retrieval</span>
       <h3>Two lanes, one answer</h3>
-      <p>Every prompt is scored by a lexical lane (BM25, generic-word damping, stack awareness) and a semantic lane (local embedding vectors), then fused — so exact names and fuzzy intent both win.</p>
+      <p>Every prompt is scored by a lexical lane (BM25, generic-word damping, stack awareness) and a semantic lane (local embedding vectors), then fused, so exact names and fuzzy intent both win.</p>
       <div class="lanes">
         <div class="lane a"><span>lexical</span><div class="bar"><i></i></div></div>
         <div class="lane b"><span>semantic</span><div class="bar"><i></i></div></div>
@@ -312,7 +351,7 @@ footer .links{display:flex;gap:20px;font-size:13px}
     <div class="cell b2 rv">
       <span class="tag">Speed</span>
       <div class="bignum">&lt;300ms</div>
-      <p>warm route, inside a 5&nbsp;s hook budget. Every stage fails open — a dead lane never delays a message.</p>
+      <p>warm route, inside a 5&nbsp;s hook budget. Every stage fails open: a dead lane never delays a message.</p>
     </div>
     <div class="cell b2 rv">
       <span class="tag">Coverage</span>
@@ -322,20 +361,20 @@ footer .links{display:flex;gap:20px;font-size:13px}
     <div class="cell b2 rv">
       <span class="tag">Learning</span>
       <h3>Learns from use</h3>
-      <p>Every suggestion actually loaded feeds back. Hits earn slowly, misses decay fast — one lucky match can never entrench.</p>
+      <p>Every suggestion actually loaded feeds back. Hits earn slowly, misses decay fast; one lucky match can never entrench.</p>
       <div class="mono-list">loaded&nbsp;&nbsp;<b>+0.25 · clamp 2.0</b><br>ignored&nbsp;<b>slow decay</b></div>
     </div>
     <div class="cell b2 rv">
       <span class="tag">Authority</span>
       <h3>Self-healing wiring</h3>
-      <p>Harness update wipes the hooks? The next route detects it, rewrites the mandate, re-lays the shim, logs the repair — on every call.</p>
+      <p>Harness update wipes the hooks? The next route detects it, rewrites the mandate, re-lays the shim, logs the repair, on every call.</p>
     </div>
     <div class="cell b2 rv">
       <span class="tag">Enforcement</span>
       <h3>75% adoption floor</h3>
-      <p>Suggestions are advice — until they're ignored. Below the floor the gate denies edits until routed skills load. Above it, it stays quiet.</p>
+      <p>Suggestions are advice, until they're ignored. Below the floor the gate denies edits until routed skills load. Above it, it stays quiet.</p>
     </div>
-    <div class="cell b3 rv">
+    <div class="cell b3 tint rv">
       <span class="tag">Local-first</span>
       <h3>No cloud, no keys, no telemetry</h3>
       <p>Stdlib Python plus one local embedding model. Nothing leaves the machine; the whole brain runs between your keystroke and the model's first token.</p>
@@ -350,122 +389,111 @@ footer .links{display:flex;gap:20px;font-size:13px}
 
 <section id="pipeline" class="wrap">
   <div class="sec-head rv">
-    <span class="eyebrow">Under the hood</span>
-    <h2>Every call, <em class="ai">end to end</em></h2>
-    <p>Intercept → verify authority → retrieve on two lanes → shape the card → deliver → learn. Every stage degrades to the previous stage's output; nothing on this path can block your message.</p>
+    <h2>Every call, <em>end to end</em></h2>
+    <p>Intercept, verify authority, retrieve on two lanes, shape the card, deliver, learn. Every stage degrades to the previous stage's output; nothing on this path can block your message.</p>
   </div>
 
   <div class="panel rv">
     <div class="cap"><h3>The pipeline</h3><span>what happens on every single call</span></div>
-    <div class="inner"><pre class="mermaid">
-flowchart TD
-    H["Harness shim<br/>Claude · Hermes · Codex · Gemini · OpenCode · agy · Cursor · OpenClaw"] --> R["route.py — CLI + hook entry"]
-    R --> C{"90 s cache hit?"}
-    C -->|yes| D["serve cached card"]
-    C -->|no| S["score() — BM25 lane<br/>generic damping · stack boost · learned prior"]
-    R --> E["dense lane — Ollama embed<br/>cosine over 777×768 vectors"]
-    S --> F["fuse() — convex blend α=0.5<br/>exact-name guarantee · ecosystem demotion"]
-    E --> F
-    F --> Q["_top_combined — floor · tail cut · kind quota"]
-    Q --> CL["score-cliff + diversity pass"]
-    CL --> RD["render card — markdown for the model"]
-    RD --> AU["authority self-heal<br/>rewritten if an update undid it"]
-    AU --> DL["deliver — card rides with the prompt"]
-    DL --> G["gate — deny-once until skills load<br/>75% adoption floor"]
-    DL --> L["learn — loads feed the prior<br/>never on the hot path"]
-    style H fill:#12121a,stroke:#22d3ee,color:#f8fafc
-    style S fill:#12121a,stroke:#2dd4a8,color:#f8fafc
-    style E fill:#12121a,stroke:#2dd4a8,color:#f8fafc
-    style F fill:#1a1a2e,stroke:#22d3ee,color:#f8fafc
-    style G fill:#12121a,stroke:#f87171,color:#f8fafc
-    style L fill:#12121a,stroke:#2dd4a8,color:#f8fafc
-    </pre></div>
+    <div class="inner">
+      <div class="flow">
+        <div class="fstage rv"><span class="fdot">1</span><div>
+          <h3>Intercept</h3>
+          <p>A per-prompt hook or plugin hands the raw prompt to <code>route.py</code>. A 90-second cache serves repeat prompts without rescoring.</p>
+        </div></div>
+        <div class="fstage rv"><span class="fdot">2</span><div>
+          <h3>Verify authority</h3>
+          <p>The mandate and interceptor are checked on every call. Anything a harness update undid is rewritten and logged before routing continues.</p>
+        </div></div>
+        <div class="fstage rv"><span class="fdot">3</span><div>
+          <h3>Retrieve on two lanes</h3>
+          <p>BM25 with generic-word damping scores exact names; local embeddings score fuzzy intent. The blend is convex, fused at α&nbsp;=&nbsp;0.5, with an exact-name guarantee.</p>
+        </div></div>
+        <div class="fstage rv"><span class="fdot">4</span><div>
+          <h3>Shape the card</h3>
+          <p>Score floor, tail cut and kind quota pick the shortlist; a score-cliff and diversity pass keep the card short and honest.</p>
+        </div></div>
+        <div class="fstage rv"><span class="fdot">5</span><div>
+          <h3>Deliver</h3>
+          <p>The card rides into the prompt before the model sees it. Every stage fails open, so a dead lane can never delay a message.</p>
+        </div></div>
+        <div class="fstage rv"><span class="fdot">6</span><div>
+          <h3>Learn and enforce</h3>
+          <p>Loads feed the prior, off the hot path. Below the 75% adoption floor the gate denies edits until routed skills load; above it, it stays quiet.</p>
+        </div></div>
+      </div>
+    </div>
   </div>
 
   <div class="panel rv">
     <div class="cap"><h3>Dependency map</h3><span>how the modules relate</span></div>
-    <div class="inner"><pre class="mermaid">
-flowchart LR
-    subgraph entry["entrypoints"]
-        CLI["route.py"]
-        HOOK["--hook (Claude)"]
-        PLUG["Hermes plugin"]
-        TS["opencode plugin"]
-    end
-    subgraph core["engine (scripts/)"]
-        PIPE["pipeline.run()"]
-        RC["router_core<br/>tokenize · score · fuse · render"]
-        DENSE["dense_index"]
-        DIV["diversity"]
-        AUTH["authority self-heal"]
-        GATE["gate enforcement"]
-    end
-    subgraph state["state (~/.tool-router)"]
-        IDX["index.json"]
-        NPZ["vectors .npz"]
-        LEARN["learned.json"]
-    end
-    subgraph loops["background"]
-        TIMER["reindex 10 min"]
-        ADOPT["adopt harvest daily"]
-        EVAL["golden-set gate"]
-    end
-    CLI --> PIPE
-    HOOK --> CLI
-    PLUG --> CLI
-    TS --> CLI
-    PIPE --> RC & DENSE & DIV & AUTH
-    RC --> IDX
-    DENSE --> NPZ
-    GATE --> LEARN
-    TIMER --> IDX & NPZ
-    ADOPT --> LEARN
-    EVAL --> PIPE
-    style PIPE fill:#1a1a2e,stroke:#22d3ee,color:#f8fafc
-    style AUTH fill:#12121a,stroke:#fbbf24,color:#f8fafc
-    style GATE fill:#12121a,stroke:#f87171,color:#f8fafc
-    </pre></div>
+    <div class="inner">
+      <div class="layers">
+        <div class="band rv">
+          <span class="blabel">Entrypoints</span>
+          <div class="chips">
+            <span class="chip lead">route.py</span><span class="chip">Claude hook</span><span class="chip">Hermes plugin</span><span class="chip">OpenCode plugin</span><span class="chip">agy hook</span>
+          </div>
+        </div>
+        <div class="blink rv">↓</div>
+        <div class="band rv">
+          <span class="blabel">Engine · scripts/</span>
+          <div class="chips">
+            <span class="chip lead">pipeline.run()</span><span class="chip">router_core</span><span class="chip">dense_index</span><span class="chip">diversity</span><span class="chip">authority self-heal</span><span class="chip">gate</span>
+          </div>
+        </div>
+        <div class="blink rv">↓</div>
+        <div class="band rv">
+          <span class="blabel">State · ~/.tool-router</span>
+          <div class="chips">
+            <span class="chip">index.json</span><span class="chip">vectors .npz</span><span class="chip">learned.json</span>
+          </div>
+        </div>
+        <div class="blink rv">↓</div>
+        <div class="band rv">
+          <span class="blabel">Background</span>
+          <div class="chips">
+            <span class="chip">reindex · 10 min</span><span class="chip">adopt harvest · daily</span><span class="chip">golden-set gate</span>
+          </div>
+          <p class="bnote">Runs on timers, off the hot path; feeds the index and the learned prior.</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="panel rv">
     <div class="cap"><h3>One prompt, in order</h3><span>sequence</span></div>
-    <div class="inner"><pre class="mermaid">
-sequenceDiagram
-    participant U as You
-    participant H as Harness
-    participant T as Toutur
-    participant M as Model
-    U->>H: types a request
-    H->>T: hook fires
-    T->>T: route (BM25 ⊕ embeddings)
-    T->>T: self-heal authority
-    T-->>H: prompt + routing card
-    H->>M: dispatch with card
-    M->>H: loads named skills first
-    H->>T: gate (deny-once if skipped)
-    M-->>U: right tools, first try
-    H->>T: loads → prior sharpens
-    </pre></div>
+    <div class="inner">
+      <div class="seq">
+        <div class="msg rv"><span class="actor">You</span><span class="arr">→</span><span class="actor">Harness</span><span class="lbl">types a request</span></div>
+        <div class="msg rv"><span class="actor">Harness</span><span class="arr">→</span><span class="actor t">Toutur</span><span class="lbl">hook fires with the prompt</span></div>
+        <div class="msg rv"><span class="actor t">Toutur</span><span class="arr">→</span><span class="actor t">Toutur</span><span class="lbl">routes on two lanes, then <b>self-heals authority</b></span></div>
+        <div class="msg rv"><span class="actor t">Toutur</span><span class="arr">→</span><span class="actor">Harness</span><span class="lbl"><b>prompt + routing card</b></span></div>
+        <div class="msg rv"><span class="actor">Harness</span><span class="arr">→</span><span class="actor m">Model</span><span class="lbl">dispatches with the card attached</span></div>
+        <div class="msg rv"><span class="actor m">Model</span><span class="arr">→</span><span class="actor">Harness</span><span class="lbl">loads the named skills first</span></div>
+        <div class="msg rv"><span class="actor">Harness</span><span class="arr">→</span><span class="actor t">Toutur</span><span class="lbl">gate denies once if skills were skipped</span></div>
+        <div class="msg rv"><span class="actor m">Model</span><span class="arr">→</span><span class="actor">You</span><span class="lbl"><b>right tools, first try</b></span></div>
+      </div>
+    </div>
   </div>
 </section>
 
 <section id="harnesses" class="wrap">
   <div class="sec-head rv">
-    <span class="eyebrow">Coverage</span>
-    <h2>Eight harnesses, <em class="ai">one brain</em></h2>
+    <h2>Eight harnesses, <em>one brain</em></h2>
     <p>Install once; Toutur finds every supported harness, wires the right interceptor for each, then keeps all of it alive through updates.</p>
   </div>
   <div class="rv" style="overflow-x:auto">
   <table>
     <tr><th>Harness</th><th>Interceptor</th><th>Card style</th><th>Enforcement</th></tr>
-    <tr><td>Claude Code</td><td>UserPromptSubmit hook</td><td>hook JSON</td><td><span class="pill ok">deny-once gate</span></td></tr>
-    <tr><td>Hermes gateway</td><td>pre_gateway_dispatch plugin</td><td>markdown + canvas UI</td><td><span class="pill note">plugin-side</span></td></tr>
-    <tr><td>OpenCode</td><td>chat.message plugin</td><td>synthetic part</td><td><span class="pill note">protocol</span></td></tr>
-    <tr><td>Antigravity (agy)</td><td>BeforeAgent hook</td><td>event payload</td><td><span class="pill note">protocol</span></td></tr>
-    <tr><td>Codex CLI</td><td>rulebook mandate</td><td>agent-invoked</td><td><span class="pill note">protocol</span></td></tr>
-    <tr><td>Gemini CLI</td><td>skill + mandate</td><td>agent-invoked</td><td><span class="pill note">protocol</span></td></tr>
-    <tr><td>Cursor</td><td>sessionStart hook</td><td>session card</td><td><span class="pill note">protocol</span></td></tr>
-    <tr><td>OpenClaw</td><td>skill + mandate</td><td>agent-invoked</td><td><span class="pill note">protocol</span></td></tr>
+    <tr><td>Claude Code</td><td>UserPromptSubmit hook</td><td>hook JSON</td><td><span class="pill strong">deny-once gate</span></td></tr>
+    <tr><td>Hermes gateway</td><td>pre_gateway_dispatch plugin</td><td>markdown + canvas UI</td><td><span class="pill soft">plugin-side</span></td></tr>
+    <tr><td>OpenCode</td><td>chat.message plugin</td><td>synthetic part</td><td><span class="pill soft">protocol</span></td></tr>
+    <tr><td>Antigravity (agy)</td><td>BeforeAgent hook</td><td>event payload</td><td><span class="pill soft">protocol</span></td></tr>
+    <tr><td>Codex CLI</td><td>rulebook mandate</td><td>agent-invoked</td><td><span class="pill soft">protocol</span></td></tr>
+    <tr><td>Gemini CLI</td><td>skill + mandate</td><td>agent-invoked</td><td><span class="pill soft">protocol</span></td></tr>
+    <tr><td>Cursor</td><td>sessionStart hook</td><td>session card</td><td><span class="pill soft">protocol</span></td></tr>
+    <tr><td>OpenClaw</td><td>skill + mandate</td><td>agent-invoked</td><td><span class="pill soft">protocol</span></td></tr>
   </table>
   </div>
 </section>
@@ -474,7 +502,7 @@ sequenceDiagram
   <div class="rv">
     <div class="cta-panel">
       <span class="eyebrow" style="margin-bottom:18px">Get started</span>
-      <h2>One line. <em class="hu">Everywhere it fits.</em></h2>
+      <h2>One line. <em>Everywhere it fits.</em></h2>
       <p>Detects your harnesses, wires each one, indexes the corpus, verifies with a live card. No accounts, no keys, no cloud.</p>
       <div class="big-install">
         <span class="prompt">$</span>
@@ -497,20 +525,7 @@ sequenceDiagram
   </div>
 </footer>
 
-<script type="module">
-  // ---------- mermaid ----------
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({
-    startOnLoad: true, theme: 'base', securityLevel: 'loose',
-    themeVariables: {
-      primaryColor: '#12121a', primaryTextColor: '#f8fafc',
-      primaryBorderColor: '#22d3ee', lineColor: '#5b6d82',
-      secondaryColor: '#1a1a2e', tertiaryColor: '#0c0c13',
-      fontFamily: 'DM Sans, sans-serif', fontSize: '14px'
-    },
-    flowchart: { curve: 'basis', padding: 12 }
-  });
-
+<script>
   // ---------- copy buttons ----------
   document.querySelectorAll('.copy').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -538,22 +553,22 @@ sequenceDiagram
       cmd: '~/.tool-router/route "profile a slow python service"',
       out: [
         ['d','## Router card (tool-router)'],
-        ['g','- python-performance-optimization — Skill (1.87)'],
+        ['g','- python-performance-optimization, Skill (1.87)'],
         ['d','  matched: profile, python, cprofile'],
-        ['g','- python-observability — Skill (0.93)'],
-        ['g','- serena — MCP (0.40)'],
-        ['d','46 more below threshold — abstained.']
+        ['g','- python-observability, Skill (0.93)'],
+        ['g','- serena, MCP (0.40)'],
+        ['d','46 more below threshold, abstained.']
       ]
     },
     {
       cmd: '~/.tool-router/route "design a premium landing page"',
       out: [
         ['d','## Router card (tool-router)'],
-        ['g','- supanova-premium-aesthetic — Skill (1.31)'],
-        ['g','- frontend-design — Skill (0.96)'],
+        ['g','- supanova-premium-aesthetic, Skill (1.31)'],
+        ['g','- frontend-design, Skill (0.96)'],
         ['d','  matched: premium, landing, design'],
-        ['g','- gsap-scrolltrigger — Skill (0.74)'],
-        ['d','kind quota: 1 mcp slot reserved — none qualified.']
+        ['g','- gsap-scrolltrigger, Skill (0.74)'],
+        ['d','kind quota: 1 mcp slot reserved, none qualified.']
       ]
     }
   ];
@@ -597,6 +612,19 @@ sequenceDiagram
 <script>
   // ---------- GSAP choreography ----------
   window.addEventListener('DOMContentLoaded', () => {
+    // rAF-alive gate: in a throttled/backgrounded tab GSAP's clock stalls and
+    // the entrance freezes at opacity 0. Only hide-for-animation when rAF is
+    // actually ticking; otherwise leave everything visible and static.
+    let rafAlive = false;
+    requestAnimationFrame(() => { rafAlive = true; });
+    setTimeout(() => {
+      if (!rafAlive) return;
+      document.documentElement.classList.add('anim');
+      initChoreography();
+    }, 60);
+  });
+
+  function initChoreography() {
     if (!window.gsap) { document.querySelectorAll('.rv').forEach(e => e.style.opacity = 1); return; }
     gsap.registerPlugin(ScrollTrigger);
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -619,7 +647,7 @@ sequenceDiagram
       scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: 1.2 }
     });
 
-    gsap.set('section .rv, section .rv', { y: 26 });
+    gsap.set('section .rv', { y: 26 });
     document.querySelectorAll('section .rv').forEach(el => {
       gsap.to(el, {
         opacity: 1, y: 0, duration: .85, ease: 'power3.out',
@@ -639,8 +667,7 @@ sequenceDiagram
       });
     });
 
-    document.querySelectorAll('.lane .bar i').forEach((el, i) => {
-      const widths = ['88%', '72%', '97%'];
+    document.querySelectorAll('.lane .bar i').forEach(el => {
       gsap.fromTo(el, { scaleX: 0 }, {
         scaleX: 1, duration: 1.1, ease: 'power3.inOut', transformOrigin: 'left center',
         scrollTrigger: { trigger: el, start: 'top 92%' }
@@ -662,7 +689,7 @@ sequenceDiagram
     // and layout settle.
     if (document.fonts?.ready) document.fonts.ready.then(() => ScrollTrigger.refresh());
     window.addEventListener('load', () => setTimeout(() => ScrollTrigger.refresh(), 350));
-  });
+  }
 </script>
 </body>
 </html>
