@@ -153,6 +153,17 @@ only after the same need repeats 3+ times, the judge confirms no local
 capability serves it, and the candidate is free + injection-screened + 1K+
 installs — such picks are marked **Auto-sourced** on later cards: tell the
 user, and `~/.tool-router/route --source-remove <skill>` undoes one.
+
+**Config protection (config-sentinel, 2026-10-08).** NEVER rewrite a config
+file wholesale (write_file / patch / `cat >` / `cp over`). A valid-YAML subset
+stub once silently dropped dashboard auth, compression, streaming and 60+ MCP
+servers for hours. To change any config: read the whole file, merge the one
+change, write through the app's own writer (`hermes config set`, the
+dashboard, or a key-preserving round-trip). `~/.hermes/config.yaml` is
+additionally hook-guarded on every harness: direct agent writes are DENIED,
+and missing sentinel keys auto-restore from the newest good backup (audit:
+`~/.hermes/logs/config-sentinel-events.jsonl`). If you see a config-sentinel
+block or restore note, re-apply your change as a MERGE, never a replacement.
 {end}"""
 
 
