@@ -64,6 +64,12 @@ HARNESSES = {
         "project_skills": [".opencode/skills"],
         "hook": "opencode",  # a chat.message plugin, not a shell hook
     },
+    "hermes": {
+        "probe": ["~/.hermes"],
+        "skills": ["~/.hermes/skills/tools"],
+        "project_skills": [],
+        "hook": "hermes",  # gateway plugin via tools/lay_hermes_plugin.py
+    },
     # Antigravity CLI (`agy`) keeps its skills under ~/.gemini/config, separate
     # from Gemini CLI's ~/.gemini/skills. Its transcripts are protobuf and its
     # PreInvocation payload carries no prompt text, so there is no way to build
@@ -498,6 +504,11 @@ def main() -> int:
                 print("  " + wirer(skill_dir, False))
                 if args.enforce:
                     print("  (--enforce is Claude Code only; skipped here)")
+        elif cfg["hook"] == "hermes":
+            # Not a shell-hook wirer: the gateway plugin is laid as files.
+            sys.path.insert(0, str(SRC / "tools"))
+            import lay_hermes_plugin
+            print("  " + lay_hermes_plugin.lay())
         elif not cfg["hook"]:
             print("  no per-prompt hook on this harness — the mandate below is the mechanism")
         if not args.no_mandate:

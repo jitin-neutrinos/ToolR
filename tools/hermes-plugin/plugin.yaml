@@ -1,0 +1,11 @@
+name: tool-router
+version: "2.1.0"
+description: >
+  Routes every incoming gateway message through the local ToolR pipeline
+  (BM25 + dense fusion over skills/MCPs/commands) and appends the routing
+  card to the message text before dispatch. Astra surfaces additionally get
+  a canvas rendering of the card. Every stage fails open: if the router is
+  down the message passes untouched. Engine lives in ~/Work/tool-router.
+author: "notjitin"
+provides_hooks:
+  - pre_gateway_dispatch
