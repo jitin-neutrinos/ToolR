@@ -105,6 +105,19 @@ def _save_state(picks: list[str], prompt_id: str, skills_needed: bool) -> None:
                          encoding="utf-8")
     except OSError:
         pass
+    # Honest per-harness ledger (2026-10-08): only routes that actually named
+    # skill-kind picks are suggestions countable against a load floor. Harness
+    # tagging: Claude Code is the only harness whose hook payload identifies
+    # itself today (UserPromptSubmit event); the hermes harvester counts its
+    # own routes from its session DB. Other harnesses route via this same file
+    # without identifying themselves and read as null ratios, not 0%.
+    try:
+        if skills_needed:
+            import adoption as _adopt
+            _adopt.record_route("claude", prompt_id,
+                                sum(1 for p in picks if p.startswith("skill:")))
+    except Exception:
+        pass
 
 
 def card_for(prompt: str, cwd: Path, prompt_id: str = "", rewrite: bool = True,

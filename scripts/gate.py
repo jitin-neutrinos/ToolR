@@ -72,6 +72,12 @@ def main() -> int:
             state["adoption"] = led
         except Exception:
             pass
+        # Honest per-harness ledger: this hook IS the claude numerator.
+        try:
+            import adoption as _adopt
+            _adopt.record_load("claude")
+        except Exception:
+            pass
         state.pop("denied_for_second", None)
         _write(state)
         # Record the loaded pick into learned.json — the usage-prior signal
@@ -123,17 +129,16 @@ def main() -> int:
         return allow()
 
     # Owner policy (2026-10-08): the harness+model must load >=75% of the
-    # routed picks. The deny-once lever enforces per prompt; this tracks the
-    # running ratio across prompts and hardens the gate when it sags: under
-    # the floor, the "once" becomes "twice" (a second refusal on the retry),
-    # which is the smallest escalation that changes model behavior without
-    # becoming a loop. Ratio rides in last_route.json (rewritten per prompt)
-    # so no second state file is needed.
+    # routed picks. Ratio now comes from the honest per-harness ledger
+    # (adoption.py): paired/routed for THIS harness, only over routes that
+    # actually suggested skills. The old global kept/total (2/104) counted a
+    # one-harness numerator against an all-harness denominator — a fictional
+    # 2% that escalated every edit. Below the measurement floor (<3 routed),
+    # no verdict: never escalate on absent data.
     try:
-        hist = state.get("adoption") or {"kept": 0, "total": 0}
-        rate = (hist["kept"] / hist["total"]) if hist.get("total") else 1.0
-        floor = float(rc.DEFAULT_CONFIG.get("adoption_floor", 0.75))
-        below_floor = hist.get("total", 0) >= 3 and rate < floor
+        import adoption as _adopt
+        below_floor = _adopt.below_floor("claude", floor=float(
+            rc.DEFAULT_CONFIG.get("adoption_floor", 0.75)))
     except Exception:
         below_floor = False
 

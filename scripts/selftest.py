@@ -748,6 +748,26 @@ def t_aliases_survive_save_and_load():
         "topical words must never be demoted"
 
 
+def t_adoption_ledger_honest():
+    """Per-harness adoption: scoped denominator, None under measurement floor,
+    no-skill-pick routes stay out, pairing only within the window."""
+    import adoption as _ad
+    if _ad.PATH.exists():
+        _ad.PATH.unlink()
+    for i in range(2):
+        _ad.record_route("claude", f"t{i}", 2)
+    assert _ad.ratio("claude") is None, "<3 samples -> no verdict"
+    assert not _ad.below_floor("claude")
+    _ad.record_route("claude", "t2", 1)
+    _ad.record_load("claude")
+    assert _ad.below_floor("claude"), "1/3 < 0.75"
+    before = _ad._load()["claude"]["routed"]
+    _ad.record_route("claude", "t3", 0)
+    assert _ad._load()["claude"]["routed"] == before, "no-skill routes excluded"
+    assert _ad.ratio("hermes") is None, "no-data harness is None, not 0%"
+    _ad.PATH.unlink(missing_ok=True)
+
+
 def t_rewriter_stage_removed():
     """The hook must NOT make a model call. The rewriter stage is removed.
 
