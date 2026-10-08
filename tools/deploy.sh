@@ -53,6 +53,10 @@ rm -f "$TARLIST"
   chmod +x install.sh
   cp "$REPO/install.ps1" install.ps1
   cp "$REPO/assets/toolr-icon.png" toolr-icon.png
+  # the landing page must exist as browsable files, not just inside the
+  # tarball — serve-www maps / to /landing/index.html
+  rm -rf "$WWW_DIR/landing"
+  cp -r "$REPO/landing" "$WWW_DIR/landing"
 )
 # Content-stamped checksum copy: the file NAME changes every deploy, so it
 # matches deploy.sh's IMMUTABLE regex and the CDN caches it forever — always
