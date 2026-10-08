@@ -27,7 +27,7 @@ HASH="$(git -C "$REPO" rev-parse --short=8 HEAD 2>/dev/null || echo nohash)"
 STAMP="${VERSION}-${HASH}"
 say "Publishing ToolR ${STAMP} -> $WWW_DIR"
 
-PAYLOAD=(SKILL.md install.py install.sh toolr_install.py toolr_tui.py scripts references tools README.md assets/toolr-icon.png)
+PAYLOAD=(SKILL.md install.py install.sh install.ps1 toolr_install.py toolr_tui.py toolr_anim.py scripts references tools README.md assets/toolr-icon.png)
 
 ARCHIVE="$WWW_DIR/toolr-${STAMP}.tar.gz"
 mkdir -p "$WWW_DIR"
@@ -51,8 +51,16 @@ rm -f "$TARLIST"
   sha256sum "toolr-${STAMP}.tar.gz" > SHA256SUMS
   cp "$REPO/install.sh" install.sh
   chmod +x install.sh
+  cp "$REPO/install.ps1" install.ps1
   cp "$REPO/assets/toolr-icon.png" toolr-icon.png
 )
+# Content-stamped checksum copy: the file NAME changes every deploy, so it
+# matches deploy.sh's IMMUTABLE regex and the CDN caches it forever — always
+# correct, immune to the mutable-URL staleness incident (2026-10-08: the old
+# serve-www sent max-age=1y for SHA256SUMS and Cloudflare pinned a stale copy;
+# origin now sends no-store, but already-cached edge objects can't be purged
+# without a CF API token, so verifiers should prefer checksums-$STAMP.txt).
+cp "$WWW_DIR/SHA256SUMS" "$WWW_DIR/checksums-${STAMP}.txt"
 
 say "Published:"
 ls -la "$WWW_DIR"
