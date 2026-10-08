@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install ToolR — one line, every harness</title>
+<meta name="description" content="Install ToolR on Linux, macOS or Windows with one command. Detects your harnesses, wires every one, verifies with a live routing card.">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="icon" href="/toolr-icon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Playfair+Display:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#0a0a0f; --midnight:#12121a;
+  --cyan:#22d3ee; --cyan-soft:rgba(34,211,238,.13);
+  --mint:#2dd4a8; --mint-soft:rgba(45,212,168,.12);
+  --text:#f8fafc; --muted:#939bab; --hairline:rgba(255,255,255,.08);
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;border-color:var(--hairline)}
+body{background:var(--void);color:var(--text);font-family:'DM Sans',sans-serif;
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiosed;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Playfair Display',serif;font-weight:500;letter-spacing:-.02em;line-height:1.1}
+p{color:var(--muted)}
+.wrap{max-width:880px;margin:0 auto;padding:0 28px}
+a{color:var(--cyan);text-decoration:none}
+.aurora{position:fixed;inset:-20%;z-index:0;pointer-events:none;opacity:.5;
+  background:
+    radial-gradient(38% 32% at 20% 8%, rgba(34,211,238,.09), transparent 60%),
+    radial-gradient(34% 30% at 80% 30%, rgba(45,212,168,.07), transparent 62%);
+  filter:blur(46px)}
+main{position:relative;z-index:2;padding:130px 0 80px}
+.eyebrow{display:inline-flex;align-items:center;gap:.55rem;font-family:'JetBrains Mono',monospace;
+  font-size:11px;text-transform:uppercase;letter-spacing:.2em;color:var(--cyan);
+  background:var(--cyan-soft);border:1px solid rgba(34,211,238,.25);
+  padding:.38rem .85rem;border-radius:999px;width:fit-content}
+h1{font-size:clamp(2rem,4vw,3.1rem);margin:20px 0 14px}
+.lede{max-width:600px;margin-bottom:40px}
+.tabs{display:flex;gap:10px;margin:0 0 0}
+.tab{font-family:'JetBrains Mono',monospace;font-size:12.5px;padding:.55rem 1.1rem;border-radius:999px;
+  border:1px solid var(--hairline);color:var(--muted);cursor:pointer;background:transparent;transition:all .4s var(--ease)}
+.tab.active{color:var(--void);border-color:transparent;background:linear-gradient(135deg,var(--cyan),#5eead4);font-weight:600}
+.codeblock{position:relative;margin-top:14px;display:none}
+.codeblock.active{display:block}
+.codeblock .body{border:1px solid var(--hairline);border-radius:16px;background:#0c0c13;
+  padding:22px 24px;font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.9;overflow-x:auto}
+.cm{color:#5b6478}.pr{color:var(--mint)}.cmd{color:var(--text)}
+.copy{border:1px solid var(--hairline);border-radius:10px;position:absolute;top:12px;right:12px;
+  background:rgba(18,18,26,.9);color:#ccd6e0;cursor:pointer;font-family:'JetBrains Mono',monospace;
+  font-size:11.5px;padding:.5rem .9rem;transition:all .4s var(--ease)}
+.copy:hover{color:var(--cyan)}
+h2{font-size:clamp(1.5rem,2.6vw,2.1rem);margin:56px 0 18px}
+.steps{counter-reset:s;margin-top:8px}
+.steps li{list-style:none;counter-increment:s;display:flex;gap:16px;padding:14px 0;color:var(--muted);font-size:15px}
+.steps li::before{content:counter(s,decimal-leading-zero);font-family:'JetBrains Mono',monospace;
+  color:var(--cyan);font-size:13px;padding-top:2px}
+.steps li strong{color:var(--text)}
+.note{border:1px solid var(--hairline);border-left:3px solid var(--mint);border-radius:14px;
+  background:rgba(18,18,26,.55);padding:18px 22px;margin-top:26px;font-size:14.5px}
+.note b{color:var(--text)}
+.faq{margin-top:14px}
+.faq details{border:1px solid var(--hairline);border-radius:14px;background:rgba(18,18,26,.55);
+  padding:16px 22px;margin-bottom:10px}
+.faq summary{cursor:pointer;color:var(--text);font-weight:500;font-size:15px}
+.faq details p{margin-top:10px;font-size:14.5px}
+.back{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:50;
+  display:flex;align-items:center;gap:20px;padding:.6rem 1.2rem;border-radius:999px;
+  background:rgba(18,18,26,.66);backdrop-filter:blur(20px);border:1px solid var(--hairline)}
+.back .brand{font-family:'Playfair Display',serif;font-size:18px;color:var(--text);display:flex;align-items:center;gap:8px}
+.back .brand i{width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,var(--cyan),var(--mint));display:inline-block}
+.back a{font-size:13.5px;color:var(--muted);transition:color .4s var(--ease)}
+.back a:hover{color:var(--text)}
+footer{border-top:1px solid var(--hairline);padding:38px 0 56px;position:relative;z-index:2}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;font-size:13px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+
+<div class="back">
+  <span class="brand"><i></i>ToolR</span>
+  <a href="/">← back to overview</a>
+</div>
+
+<main class="wrap">
+  <span class="eyebrow">Installation</span>
+  <h1>One line. Everywhere it fits.</h1>
+  <p class="lede">The installer probes every supported harness on your machine, shows you what it found with a live TUI, wires each one with the right interceptor, and verifies with a real routing card. No accounts, no API keys, no cloud.</p>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="linux">Linux</button>
+    <button class="tab" data-tab="mac">macOS</button>
+    <button class="tab" data-tab="win">Windows</button>
+  </div>
+
+  <div class="codeblock active" id="tab-linux">
+    <button class="copy" data-copy="code-linux">copy</button>
+    <div class="body" id="code-linux"><span class="cm"># one line — detects harnesses, installs everywhere it fits</span><br>
+<span class="pr">$</span> <span class="cmd">curl -fsSL https://toolr.jitinnair.com/install.sh | bash</span><br>
+<span class="cm"># already cloned? keep it fresh instead:</span><br>
+<span class="pr">$</span> <span class="cmd">git -C ~/toolr pull &amp;&amp; python3 ~/toolr/install.py</span></div>
+  </div>
+
+  <div class="codeblock" id="tab-mac">
+    <button class="copy" data-copy="code-mac">copy</button>
+    <div class="body" id="code-mac"><span class="cm"># macOS — same installer (needs git + python3)</span><br>
+<span class="pr">$</span> <span class="cmd">curl -fsSL https://toolr.jitinnair.com/install.sh | bash</span><br>
+<span class="cm"># git comes with the Command Line Tools:</span><br>
+<span class="pr">$</span> <span class="cmd">xcode-select --install</span></div>
+  </div>
+
+  <div class="codeblock" id="tab-win">
+    <button class="copy" data-copy="code-win">copy</button>
+    <div class="body" id="code-win"><span class="cm"># PowerShell 5.1+ — no WSL / Git Bash needed</span><br>
+<span class="pr">PS&gt;</span> <span class="cmd">irm https://toolr.jitinnair.com/install.ps1 | iex</span><br>
+<span class="cm"># prerequisites if missing:</span><br>
+<span class="pr">PS&gt;</span> <span class="cmd">winget install --id Git.Git -e</span><br>
+<span class="pr">PS&gt;</span> <span class="cmd">winget install --id Python.Python.3.12 -e</span><br>
+<span class="cm"># then route from any terminal:</span><br>
+<span class="pr">PS&gt;</span> <span class="cmd">~\.tool-router\route.cmd "your request here"</span></div>
+  </div>
+
+  <h2>What the installer does</h2>
+  <ol class="steps">
+    <li><strong>Detect</strong> — probes Claude Code, Codex, Gemini, Antigravity, Cursor, OpenCode, OpenClaw, Hermes and the shared <code>~/.agents</code> location, and lists what it found before touching anything.</li>
+    <li><strong>Wire</strong> — symlinks the skill into each harness, registers the per-prompt interceptor where the harness supports one, and writes the routing mandate into its rulebook as a marked, self-healing block.</li>
+    <li><strong>Index</strong> — indexes every skill, MCP, agent and command on the machine (lexical + embedding vectors) in about a second.</li>
+    <li><strong>Verify</strong> — you route a prompt and watch the card arrive with scores and match reasons.</li>
+  </ol>
+
+  <h2>Verify your install</h2>
+  <div class="codeblock active" style="display:block">
+    <button class="copy" data-copy="code-verify">copy</button>
+    <div class="body" id="code-verify"><span class="cm"># should print a card with ranked picks and scores</span><br>
+<span class="pr">$</span> <span class="cmd">~/.tool-router/route "profile a slow python service"</span><br>
+<span class="cm"># full self-check (44 checks)</span><br>
+<span class="pr">$</span> <span class="cmd">python3 ~/toolr/scripts/selftest.py</span></div>
+  </div>
+
+  <div class="note"><b>Local model (optional):</b> the semantic lane uses Ollama with <code>nomic-embed-text</code> when present, and the router stays BM25-only without it — everything degrades gracefully. <code>ollama pull nomic-embed-text</code> is the one optional step.</div>
+
+  <h2>Uninstall / update</h2>
+  <div class="codeblock active" style="display:block">
+    <button class="copy" data-copy="code-un">copy</button>
+    <div class="body" id="code-un"><span class="cm"># update = pull + re-run the installer (idempotent)</span><br>
+<span class="pr">$</span> <span class="cmd">git -C ~/toolr pull &amp;&amp; python3 ~/toolr/install.py</span><br>
+<span class="cm"># remove hooks + skills from every harness (keeps your data)</span><br>
+<span class="pr">$</span> <span class="cmd">python3 ~/toolr/install.py --uninstall</span></div>
+  </div>
+
+  <h2>Questions</h2>
+  <div class="faq">
+    <details><summary>Does anything leave my machine?</summary><p>No. Routing is local: stdlib Python plus, optionally, a local embedding model. The only network use is the install itself (cloning the repo) and the optional registry search behind <code>route --source</code>, which never runs on the hot path.</p></details>
+    <details><summary>Which harnesses get a per-prompt hook?</summary><p>Claude Code, Hermes, OpenCode, Antigravity and Cursor register native interceptors. Codex, Gemini CLI and OpenClaw get the skill + rulebook mandate (the agent runs the router itself). The coverage table on the <a href="/">overview page</a> has the full matrix.</p></details>
+    <details><summary>Will it slow my prompts down?</summary><p>A warm route measures under 300 ms, inside every harness hook budget, with a 90-second cache for repeated prompts. If the router ever fails, every stage fails open — your message passes untouched.</p></details>
+    <details><summary>What if a harness update breaks the wiring?</summary><p>That's the self-heal: on every route ToolR verifies its mandate and interceptor, rewrites whatever an update undid, and logs the repair to <code>~/.tool-router/authority-heal.jsonl</code>.</p></details>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Built by <a href="https://www.jitinnair.com">Jitin Nair</a></span>
+    <span><a href="https://github.com/jitin-neutrinos/ToolR">GitHub</a> · <a href="/">Overview</a></span>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('.codeblock').forEach(c => {
+      if (c.id?.startsWith('tab-')) c.classList.toggle('active', c.id === 'tab-' + t.dataset.tab);
+    });
+  }));
+  document.querySelectorAll('.copy').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const src = document.getElementById(btn.dataset.copy);
+      const text = (src?.innerText || '').replace(/^PS>\s?/gm, '').replace(/^\$\s?/gm, '');
+      try { await navigator.clipboard.writeText(text); } catch {}
+      btn.textContent = 'copied ✓';
+      setTimeout(() => btn.textContent = 'copy', 1400);
+    });
+  });
+</script>
+</body>
+</html>

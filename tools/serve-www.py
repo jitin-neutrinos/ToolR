@@ -19,9 +19,12 @@ IMMUTABLE = re.compile(r"-[0-9a-f]{8,}\.(tar\.gz|tgz|zip|whl)$", re.I)
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
-        # serve the landing page at /
-        if self.path in ("/", "/index.html"):
+        # explicit route map: landing at /, install guide at /install
+        path = self.path.split("?")[0]
+        if path in ("/", "/index.html"):
             self.path = "/landing/index.html"
+        elif path in ("/install", "/install/") or path.startswith("/install?"):
+            self.path = "/landing/install/index.html"
         super().do_GET()
 
     def end_headers(self):
