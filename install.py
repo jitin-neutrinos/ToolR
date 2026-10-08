@@ -220,6 +220,13 @@ def install_launchers() -> Path:
         p.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{SRC / "scripts" / script}" "$@"\n',
                      encoding="utf-8")
         p.chmod(0o755)
+        if os.name == "nt":
+            # Windows can't exec the sh shim; emit a .cmd twin next to it.
+            # %* forwards all args; the doubled quotes survive paths with spaces.
+            cmd = base / f"{name}.cmd"
+            cmd.write_text(
+                f'@echo off\r\n"{sys.executable}" "{SRC / "scripts" / script}" %*\r\n',
+                encoding="ascii")
     return base
 
 

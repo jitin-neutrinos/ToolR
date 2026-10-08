@@ -12,6 +12,7 @@ Plus install.py's flags pass through (--harness, --copy, --no-hooks, ...).
 from __future__ import annotations
 
 import argparse
+import itertools
 import os
 import subprocess
 import sys
@@ -86,46 +87,65 @@ def run_demo(args) -> int:
 def run_install(args) -> int:
     t0 = time.time()
     print(T.banner("ToolR installer"))
-    print(T.render_steps(0), flush=True)
-    time.sleep(0.4)
+    try:
+        import toolr_anim as A
+    except Exception:
+        A = None
 
-    found = _detect()
-    print("\r" + T.render_steps(2, [DISPLAY.get(h, h) for h in found]), flush=True)
-    time.sleep(0.5)
+    # Step 1 — probe (animated when on a TTY)
+    found = []
+    if A:
+        with A.Spinner("probing harnesses…") as s:
+            found = _detect()
+            time.sleep(0.3)
+            s.stop(final=f"{len(found)} harness(es) found: "
+                   + ", ".join(DISPLAY.get(h, h) for h in found))
+    else:
+        found = _detect()
+        print(T.render_steps(2, [DISPLAY.get(h, h) for h in found]), flush=True)
 
     if not found:
         print(T.render_steps(3, None))
         print(T._ansi("\n  No supported harness found on this machine.", (240, 90, 90)))
-        print(T._ansi("  Pass --hordaness NAME to force one, or install a harness first.",
+        print(T._ansi("  Pass --harness NAME to force one, or install a harness first.",
                       (240, 90, 90)))
         return 1
 
-    # real install via install.py, streaming its output as sub-lines
+    # Step 2 — install (real work streamed under an animated progress line)
+    print()
     cmd = [sys.executable, str(HERE / "install.py")] + args.forward
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1)
     rows: list[tuple[str, str, str]] = []
+    tick = itertools.count()
     for line in proc.stdout:
         line = line.rstrip()
         if not line:
             continue
         print(T._ansi("      " + line, (150, 158, 170)), flush=True)
+        if A and next(tick) % 4 == 0:
+            print("\r\033[K" + A.progress(min(0.9, next(tick) / 24),
+                                          label="laying skills + wiring hooks"), end="")
         if line.startswith("detected harnesses:"):
             names = line.split(":", 1)[1].strip()
             rows = [(DISPLAY.get(n, n) or n, "installed", "") for n in names.split(", ") if n]
     proc.wait()
+    if A:
+        print("\r\033[K" + A.progress(1.0, label="done"))
+    print()
 
-    print("\r" + T.render_steps(4), flush=True)
-    time.sleep(0.3)
-    if proc.returncode == 0:
-        print("\r" + T.render_steps(7), flush=True)
     ms = (time.time() - t0) * 1000
     print(T.render_harness_table(rows or [(DISPLAY.get(h, h), "installed", "") for h in found]))
     print()
-    hdr = T._ansi(f"  ToolR installed in {ms:.0f} ms — run:", (80, 220, 120))
-    ex = T._ansi('  ~/.tool-router/route "your request here"', (245, 248, 252))
-    print(hdr)
-    print(ex)
+    if proc.returncode == 0 and A:
+        A.celebrate([
+            f"ToolR installed in {ms:.0f} ms across {len(found)} harness(es)",
+            'try:  ~/.tool-router/route "your request here"',
+        ])
+    else:
+        mark = T._ansi("✔", (80, 220, 120)) if proc.returncode == 0 else T._ansi("✘", (240, 90, 90))
+        print(f"  {mark} ToolR {'installed' if proc.returncode == 0 else 'FAILED'} in {ms:.0f} ms")
+        print(T._ansi('  ~/.tool-router/route "your request here"', (245, 248, 252)))
     return proc.returncode
 
 
