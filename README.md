@@ -1,7 +1,7 @@
-# ToolR
+# Toutur
 
 <p align="center">
-  <img src="assets/toolr-wordmark.png" alt="ToolR wordmark" width="480">
+  <img src="assets/toutur-wordmark.png" alt="Toutur wordmark" width="480">
 </p>
 
 Pick the right skills, MCP servers, subagents and commands *before* doing the
@@ -17,7 +17,7 @@ count grows past ~50. The same trap exists for MCP tools: accuracy collapses
 past 30–50 visible tools, and Anthropic's own tool search returns only ~34–56%
 retrieval accuracy in independent tests at scale.
 
-ToolR reads the descriptions off disk instead, where nothing is truncated. It
+Toutur reads the descriptions off disk instead, where nothing is truncated. It
 indexes every capability, scores them against the request (BM25 + local
 embeddings fused, plus a capability-alias vocabulary bridge), and hands the
 model a short **routing card** — what to load, what the request actually asks
@@ -30,7 +30,7 @@ MRR 0.27 — and every change is gated on that set before it ships (see
 
 ## How it compares
 
-| | **ToolR** | skill-search-mcp | Skill Context Manager | Native tool search (Claude/Codex) |
+| | **Toutur** | skill-search-mcp | Skill Context Manager | Native tool search (Claude/Codex) |
 |---|---|---|---|---|
 | Harnesses | **6+ (Claude, Codex, Gemini, Cursor, OpenCode, OpenClaw, ~/.agents)** | Claude Code | One harness | One harness |
 | Routes… | **skills + MCPs + subagents + commands** | skills only | skills only | MCP tools only |
@@ -43,21 +43,21 @@ MRR 0.27 — and every change is gated on that set before it ships (see
 | Eval harness included | **yes (golden set + ablation + robustness)** | benchmark numbers | no | vendor evals |
 
 Native tool search is complementary, not a replacement: it hides MCP tool
-schemas; ToolR decides what the agent should *load* across all capability kinds.
+schemas; Toutur decides what the agent should *load* across all capability kinds.
 
 ## Install
 
 Landing page with full architecture diagrams and per-OS instructions:
-**https://toolr.jitinnair.com/landing/**
+**https://toutur.jitinnair.com/landing/**
 
 ```bash
-curl -fsSL https://toolr.jitinnair.com/install.sh | bash
+curl -fsSL https://toutur.jitinnair.com/install.sh | bash
 ```
 
 Windows (PowerShell 5.1+):
 
 ```powershell
-irm https://toolr.jitinnair.com/install.ps1 | iex
+irm https://toutur.jitinnair.com/install.ps1 | iex
 ```
 
 The installer detects every harness on the machine — Claude Code, Codex CLI,
@@ -69,10 +69,10 @@ mandate. A step-by-step TUI shows exactly what it found and changed.
 Manual install:
 
 ```bash
-git clone https://github.com/jitin-neutrinos/ToolR ~/toolr
-python3 ~/toolr/install.py --check       # see what's detected, change nothing
-python3 ~/toolr/install.py               # install into every harness found
-python3 ~/toolr/toolr_install.py --demo  # preview the TUI, change nothing
+git clone https://github.com/jitin-neutrinos/Toutur ~/toutur
+python3 ~/toutur/install.py --check       # see what's detected, change nothing
+python3 ~/toutur/install.py               # install into every harness found
+python3 ~/toutur/toolr_install.py --demo  # preview the TUI, change nothing
 ```
 
 `--check` changes nothing. A real install symlinks the skill into each detected
@@ -122,7 +122,7 @@ turn and the model follows it. Anywhere else, or to route a rephrased request:
 Example card:
 
 ```
-## Router card (ToolR)
+## Router card (Toutur)
 
 **Step 1 — enrich.** Restate the request in 1-3 lines before acting: goal,
 target, done-condition. ...

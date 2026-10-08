@@ -1,13 +1,13 @@
 #!/bin/sh
-# ToolR one-line installer — curl -fsSL https://toolr.jitinnair.com/install.sh | bash
+# Toutur one-line installer — curl -fsSL https://toutur.jitinnair.com/install.sh | bash
 # Detects harnesses, clones/reuses the repo, runs the TUI installer.
 set -eu
 
-REPO_URL="${TOOLR_REPO:-https://github.com/jitin-neutrinos/ToolR}"
-DIR="${TOOLR_DIR:-$HOME/toolr}"
+REPO_URL="${TOOLR_REPO:-https://github.com/jitin-neutrinos/Toutur}"
+DIR="${TOOLR_DIR:-$HOME/toutur}"
 
 echo ""
-echo "  ToolR — route every prompt to the right skill."
+echo "  Toutur — route every prompt to the right skill."
 echo "  repo: $REPO_URL"
 echo ""
 

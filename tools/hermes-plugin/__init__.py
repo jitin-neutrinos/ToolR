@@ -103,7 +103,7 @@ def _card_to_canvas(result: dict) -> str | None:
         if not rows:
             return None
         blocks = [
-            {"type": "callout", "tone": "info", "title": "ToolR — capabilities routed",
+            {"type": "callout", "tone": "info", "title": "Toutur — capabilities routed",
              "body": "The router picked these before work started; the agent "
                      "will load them as needed. Nothing is required from you."},
             {"type": "table", "columns": ["capability", "kind", "score", "matched"],
@@ -118,7 +118,7 @@ def _card_to_canvas(result: dict) -> str | None:
         if cov:
             blocks.append({"type": "callout", "tone": "info",
                            "body": "Coverage: " + cov.group(1).strip()})
-        return "```astra-canvas\n" + json.dumps({"v": 1, "title": "ToolR routing",
+        return "```astra-canvas\n" + json.dumps({"v": 1, "title": "Toutur routing",
                                                  "blocks": blocks}) + "\n```"
     except Exception:
         return None

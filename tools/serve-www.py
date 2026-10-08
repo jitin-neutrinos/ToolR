@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static file server for the ToolR installer (toolr.jitinnair.com).
+"""Static file server for the Toutur installer (toutur.jitinnair.com).
 
 Same policy as neutrinos-designer's serve-www.py (proven against Cloudflare
 edge caching): immutable artifacts (content-hash-named) cache forever,

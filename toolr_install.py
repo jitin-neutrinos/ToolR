@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""toolr_install.py — the ToolR rich TUI installer.
+"""toolr_install.py — the Toutur rich TUI installer.
 
 Wraps install.py's detection/wiring with a branded terminal UI:
 pixel-art logo -> step-by-step progress -> per-harness status table.
@@ -76,7 +76,7 @@ def run_demo(args) -> int:
     rows = [(DISPLAY.get(h, h),
              "already" if _already_installed(h) else "installed",
              SKILL_PATHS.get(h, "")) for h in found]
-    print(T.banner("ToolR installer (demo)"))
+    print(T.banner("Toutur installer (demo)"))
     print(T.render_steps(3, [DISPLAY.get(h, h) for h in found]))
     print(T.render_harness_table(rows))
     print()
@@ -86,7 +86,7 @@ def run_demo(args) -> int:
 
 def run_install(args) -> int:
     t0 = time.time()
-    print(T.banner("ToolR installer"))
+    print(T.banner("Toutur installer"))
     try:
         import toolr_anim as A
     except Exception:
@@ -139,12 +139,12 @@ def run_install(args) -> int:
     print()
     if proc.returncode == 0 and A:
         A.celebrate([
-            f"ToolR installed in {ms:.0f} ms across {len(found)} harness(es)",
+            f"Toutur installed in {ms:.0f} ms across {len(found)} harness(es)",
             'try:  ~/.tool-router/route "your request here"',
         ])
     else:
         mark = T._ansi("✔", (80, 220, 120)) if proc.returncode == 0 else T._ansi("✘", (240, 90, 90))
-        print(f"  {mark} ToolR {'installed' if proc.returncode == 0 else 'FAILED'} in {ms:.0f} ms")
+        print(f"  {mark} Toutur {'installed' if proc.returncode == 0 else 'FAILED'} in {ms:.0f} ms")
         print(T._ansi('  ~/.tool-router/route "your request here"', (245, 248, 252)))
     return proc.returncode
 

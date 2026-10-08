@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""modelcontext.py — ToolR's per-turn model/limits/cost resolver.
+"""modelcontext.py — Toutur's per-turn model/limits/cost resolver.
 
 Feeds the "decision engine": how many picks the card should carry given the
 session model's context window, cost tier, and quota posture.
@@ -20,7 +20,7 @@ Sources, in priority order (all optional, all fail-open):
 
 The resolver NEVER calls the network on the hot path. Pricing is data updated
 by `refresh()` (writes the model-overrides.json), which fetches OpenRouter's
-public models endpoint (rate-limit status is out of scope: ToolR only ever
+public models endpoint (rate-limit status is out of scope: Toutur only ever
 needs the model's catalog facts, not the user's remaining balance — most
 harnesses do not expose that in hook env, and polling a paid billing API per
 prompt is exactly the network hop this module is forbidden to make. It is a

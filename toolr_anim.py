@@ -124,4 +124,4 @@ if __name__ == "__main__":
         sys.stdout.flush()
         time.sleep(0.2)
     print()
-    celebrate(["ToolR installed in 812 ms", 'try:  ~/.tool-router/route "fix my flaky tests"'])
+    celebrate(["Toutur installed in 812 ms", 'try:  ~/.tool-router/route "fix my flaky tests"'])

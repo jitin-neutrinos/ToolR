@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Install ToolR — one line, every harness</title>
-<meta name="description" content="Install ToolR on Linux, macOS or Windows with one command. Detects your harnesses, wires every one, verifies with a live routing card.">
+<title>Install Toutur — one line, every harness</title>
+<meta name="description" content="Install Toutur on Linux, macOS or Windows with one command. Detects your harnesses, wires every one, verifies with a live routing card.">
 <meta name="theme-color" content="#0a0a0f">
-<link rel="icon" href="/toolr-icon.png" type="image/png">
+<link rel="icon" href="/toutur-icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Playfair+Display:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -81,7 +81,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
 <div class="aurora"></div>
 
 <div class="back">
-  <span class="brand"><i></i>ToolR</span>
+  <span class="brand"><i></i>Toutur</span>
   <a href="/">← back to overview</a>
 </div>
 
@@ -99,15 +99,15 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
   <div class="codeblock active" id="tab-linux">
     <button class="copy" data-copy="code-linux">copy</button>
     <div class="body" id="code-linux"><span class="cm"># one line — detects harnesses, installs everywhere it fits</span><br>
-<span class="pr">$</span> <span class="cmd">curl -fsSL https://toolr.jitinnair.com/install.sh | bash</span><br>
+<span class="pr">$</span> <span class="cmd">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</span><br>
 <span class="cm"># already cloned? keep it fresh instead:</span><br>
-<span class="pr">$</span> <span class="cmd">git -C ~/toolr pull &amp;&amp; python3 ~/toolr/install.py</span></div>
+<span class="pr">$</span> <span class="cmd">git -C ~/toutur pull &amp;&amp; python3 ~/toutur/install.py</span></div>
   </div>
 
   <div class="codeblock" id="tab-mac">
     <button class="copy" data-copy="code-mac">copy</button>
     <div class="body" id="code-mac"><span class="cm"># macOS — same installer (needs git + python3)</span><br>
-<span class="pr">$</span> <span class="cmd">curl -fsSL https://toolr.jitinnair.com/install.sh | bash</span><br>
+<span class="pr">$</span> <span class="cmd">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</span><br>
 <span class="cm"># git comes with the Command Line Tools:</span><br>
 <span class="pr">$</span> <span class="cmd">xcode-select --install</span></div>
   </div>
@@ -115,7 +115,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
   <div class="codeblock" id="tab-win">
     <button class="copy" data-copy="code-win">copy</button>
     <div class="body" id="code-win"><span class="cm"># PowerShell 5.1+ — no WSL / Git Bash needed</span><br>
-<span class="pr">PS&gt;</span> <span class="cmd">irm https://toolr.jitinnair.com/install.ps1 | iex</span><br>
+<span class="pr">PS&gt;</span> <span class="cmd">irm https://toutur.jitinnair.com/install.ps1 | iex</span><br>
 <span class="cm"># prerequisites if missing:</span><br>
 <span class="pr">PS&gt;</span> <span class="cmd">winget install --id Git.Git -e</span><br>
 <span class="pr">PS&gt;</span> <span class="cmd">winget install --id Python.Python.3.12 -e</span><br>
@@ -137,7 +137,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
     <div class="body" id="code-verify"><span class="cm"># should print a card with ranked picks and scores</span><br>
 <span class="pr">$</span> <span class="cmd">~/.tool-router/route "profile a slow python service"</span><br>
 <span class="cm"># full self-check (44 checks)</span><br>
-<span class="pr">$</span> <span class="cmd">python3 ~/toolr/scripts/selftest.py</span></div>
+<span class="pr">$</span> <span class="cmd">python3 ~/toutur/scripts/selftest.py</span></div>
   </div>
 
   <div class="note"><b>Local model (optional):</b> the semantic lane uses Ollama with <code>nomic-embed-text</code> when present, and the router stays BM25-only without it — everything degrades gracefully. <code>ollama pull nomic-embed-text</code> is the one optional step.</div>
@@ -146,9 +146,9 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
   <div class="codeblock active" style="display:block">
     <button class="copy" data-copy="code-un">copy</button>
     <div class="body" id="code-un"><span class="cm"># update = pull + re-run the installer (idempotent)</span><br>
-<span class="pr">$</span> <span class="cmd">git -C ~/toolr pull &amp;&amp; python3 ~/toolr/install.py</span><br>
+<span class="pr">$</span> <span class="cmd">git -C ~/toutur pull &amp;&amp; python3 ~/toutur/install.py</span><br>
 <span class="cm"># remove hooks + skills from every harness (keeps your data)</span><br>
-<span class="pr">$</span> <span class="cmd">python3 ~/toolr/install.py --uninstall</span></div>
+<span class="pr">$</span> <span class="cmd">python3 ~/toutur/install.py --uninstall</span></div>
   </div>
 
   <h2>Questions</h2>
@@ -156,14 +156,14 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;
     <details><summary>Does anything leave my machine?</summary><p>No. Routing is local: stdlib Python plus, optionally, a local embedding model. The only network use is the install itself (cloning the repo) and the optional registry search behind <code>route --source</code>, which never runs on the hot path.</p></details>
     <details><summary>Which harnesses get a per-prompt hook?</summary><p>Claude Code, Hermes, OpenCode, Antigravity and Cursor register native interceptors. Codex, Gemini CLI and OpenClaw get the skill + rulebook mandate (the agent runs the router itself). The coverage table on the <a href="/">overview page</a> has the full matrix.</p></details>
     <details><summary>Will it slow my prompts down?</summary><p>A warm route measures under 300 ms, inside every harness hook budget, with a 90-second cache for repeated prompts. If the router ever fails, every stage fails open — your message passes untouched.</p></details>
-    <details><summary>What if a harness update breaks the wiring?</summary><p>That's the self-heal: on every route ToolR verifies its mandate and interceptor, rewrites whatever an update undid, and logs the repair to <code>~/.tool-router/authority-heal.jsonl</code>.</p></details>
+    <details><summary>What if a harness update breaks the wiring?</summary><p>That's the self-heal: on every route Toutur verifies its mandate and interceptor, rewrites whatever an update undid, and logs the repair to <code>~/.tool-router/authority-heal.jsonl</code>.</p></details>
   </div>
 </main>
 
 <footer>
   <div class="wrap">
     <span>Built by <a href="https://www.jitinnair.com">Jitin Nair</a></span>
-    <span><a href="https://github.com/jitin-neutrinos/ToolR">GitHub</a> · <a href="/">Overview</a></span>
+    <span><a href="https://github.com/jitin-neutrinos/Toutur">GitHub</a> · <a href="/">Overview</a></span>
   </div>
 </footer>
 

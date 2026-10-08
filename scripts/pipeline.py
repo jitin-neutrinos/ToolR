@@ -316,11 +316,11 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
         if not heal.get("mandate_ok"):
             authority_note = _auth.card_notice()
         elif heal.get("repaired"):
-            authority_note = ("_ToolR authority self-heal re-applied: "
+            authority_note = ("_Toutur authority self-heal re-applied: "
                               + ", ".join(heal["repaired"])
                               + " (an update or healing pass had undone it). _")
         elif heal.get("shim_ok") is False:
-            authority_note = ("_ToolR interception shim on harness '"
+            authority_note = ("_Toutur interception shim on harness '"
                               + str(heal.get("harness") or "?")
                               + "' missing and not auto-repairable — run "
                               "install.py. Routing still served this card._")

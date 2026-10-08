@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Publish the ToolR installer to the static web directory served at toolr.jitinnair.com.
+# Publish the Toutur installer to the static web directory served at toutur.jitinnair.com.
 #
 #   bash tools/deploy.sh            # build + publish + verify
 #   bash tools/deploy.sh --dry-run  # show what it would publish
 #
 # What it produces in $WWW_DIR:
-#   toolr-<version>.tar.gz     the pack (install.py, scripts/, SKILL.md, TUI)
+#   toutur-<version>.tar.gz     the pack (install.py, scripts/, SKILL.md, TUI)
 #   SHA256SUMS                 checksums the archive hash
 #   install.sh                 the one-command bootstrap
-#   toolr-icon.png             the repo icon
+#   toutur-icon.png             the repo icon
 #
 # Served by toolr-www.service (127.0.0.1:8030) behind the existing cloudflared
 # tunnel. Nothing here touches the tunnel or DNS.
@@ -25,11 +25,11 @@ say() { printf '\033[1m%s\033[0m\n' "$*"; }
 VERSION="$(date -u +%Y%m%d)"
 HASH="$(git -C "$REPO" rev-parse --short=8 HEAD 2>/dev/null || echo nohash)"
 STAMP="${VERSION}-${HASH}"
-say "Publishing ToolR ${STAMP} -> $WWW_DIR"
+say "Publishing Toutur ${STAMP} -> $WWW_DIR"
 
-PAYLOAD=(SKILL.md install.py install.sh install.ps1 toolr_install.py toolr_tui.py toolr_anim.py landing scripts references tools README.md assets/toolr-icon.png)
+PAYLOAD=(SKILL.md install.py install.sh install.ps1 toolr_install.py toolr_tui.py toolr_anim.py landing scripts references tools README.md assets/toutur-icon.png)
 
-ARCHIVE="$WWW_DIR/toolr-${STAMP}.tar.gz"
+ARCHIVE="$WWW_DIR/toutur-${STAMP}.tar.gz"
 mkdir -p "$WWW_DIR"
 TARLIST="$(mktemp)"
 for f in "${PAYLOAD[@]}"; do
@@ -48,11 +48,11 @@ rm -f "$TARLIST"
 
 (
   cd "$WWW_DIR"
-  sha256sum "toolr-${STAMP}.tar.gz" > SHA256SUMS
+  sha256sum "toutur-${STAMP}.tar.gz" > SHA256SUMS
   cp "$REPO/install.sh" install.sh
   chmod +x install.sh
   cp "$REPO/install.ps1" install.ps1
-  cp "$REPO/assets/toolr-icon.png" toolr-icon.png
+  cp "$REPO/assets/toutur-icon.png" toutur-icon.png
   # the landing page must exist as browsable files, not just inside the
   # tarball — serve-www maps / to /landing/index.html
   rm -rf "$WWW_DIR/landing"

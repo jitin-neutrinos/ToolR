@@ -4,7 +4,7 @@ description: Route each request to the right local capabilities before doing the
 license: MIT
 metadata:
   version: "1.0.0"
-  homepage: "https://github.com/notjitin/tool-router"
+  homepage: "https://github.com/jitin-neutrinos/Toutur"
 ---
 
 # tool-router

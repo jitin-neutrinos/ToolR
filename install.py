@@ -419,7 +419,7 @@ OPENCODE_PLUGIN = '''// tool-router — injects a routing card as a synthetic pa
 // the AGENTS.md mandate still work without it.
 const ROUTE = "{route}"
 
-export const ToolRouterPlugin = async () => ({{
+export const TouturouterPlugin = async () => ({{
   "chat.message": async (input, output) => {{
     try {{
       const text = (output.parts || [])

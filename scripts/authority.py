@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""authority.py — ToolR "am I the tool-decider?" check + self-install.
+"""authority.py — Toutur "am I the tool-decider?" check + self-install.
 
-Contract per the owner requirement: on every route, ToolR first verifies the
+Contract per the owner requirement: on every route, Toutur first verifies the
 harness's always-on docs (CLAUDE.md / AGENTS.md / GEMINI.md / SOUL.md —
-whatever exists) already delegate tool-selection authority to ToolR. If yes →
+whatever exists) already delegate tool-selection authority to Toutur. If yes →
 route normally. If no → attempt to add the delegation block (the same marked
 block install.py writes); if that fails (read-only fs, permissions), say so on
 the card and continue unaided.
@@ -273,6 +273,6 @@ def card_notice() -> str:
         return ""
     err = memo.get("ensure_error")
     if err:
-        return (f"_tool-decider authority NOT granted ({err}) — ToolR ran "
+        return (f"_tool-decider authority NOT granted ({err}) — Toutur ran "
                 f"unaided; fix the write failure or run install.py._")
     return ""

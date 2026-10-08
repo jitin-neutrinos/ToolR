@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rearm_hermes.py — one-shot: re-arm ToolR's hook inside a running hermes-gateway.
+"""rearm_hermes.py — one-shot: re-arm Toutur's hook inside a running hermes-gateway.
 
 Why this exists (measured 2026-10-08, twice): Hermes' boot-time plugin
 activation does not register gateway-transform hooks (pre_gateway_dispatch),

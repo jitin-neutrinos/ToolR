@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ToolR — route every prompt to the right skill</title>
-<meta name="description" content="ToolR sits in front of your AI coding harnesses and routes every prompt to the right skills, MCPs and agents — before work starts. One-line install.">
+<title>Toutur — route every prompt to the right skill</title>
+<meta name="description" content="Toutur sits in front of your AI coding harnesses and routes every prompt to the right skills, MCPs and agents — before work starts. One-line install.">
 <meta name="theme-color" content="#0a0a0f">
-<link rel="icon" href="/toolr-icon.png" type="image/png">
+<link rel="icon" href="/toutur-icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Playfair+Display:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -245,22 +245,22 @@ footer .links{display:flex;gap:20px;font-size:13px}
 <div class="progress" id="progress"></div>
 
 <nav id="nav">
-  <span class="brand"><i></i>ToolR</span>
+  <span class="brand"><i></i>Toutur</span>
   <a class="navlink" href="#how">How it works</a>
   <a class="navlink" href="#pipeline">Pipeline</a>
   <a class="navlink" href="#harnesses">Harnesses</a>
   <a class="navlink" href="/install/">Install</a>
-  <a class="cta" href="/install/">Get ToolR</a>
+  <a class="cta" href="/install/">Get Toutur</a>
 </nav>
 
 <header class="hero wrap">
   <div class="hero-copy">
     <span class="eyebrow rv">One install · <b>every harness</b> · every prompt</span>
-    <h1 class="rv">Your AI has hundreds of tools. ToolR makes it <em class="hu">choose</em> like it <em class="ai">knows</em> them.</h1>
-    <p class="sub rv">ToolR reads every prompt the moment it arrives — on your machine, in ~250&nbsp;ms — and hands your agent a ranked shortlist of the skills, MCPs and subagents that actually fit. <b>It learns from what gets used, heals its own wiring after harness updates, and stays silent when nothing fits.</b></p>
+    <h1 class="rv">Your AI has hundreds of tools. Toutur makes it <em class="hu">choose</em> like it <em class="ai">knows</em> them.</h1>
+    <p class="sub rv">Toutur reads every prompt the moment it arrives — on your machine, in ~250&nbsp;ms — and hands your agent a ranked shortlist of the skills, MCPs and subagents that actually fit. <b>It learns from what gets used, heals its own wiring after harness updates, and stays silent when nothing fits.</b></p>
     <div class="install rv">
       <span class="prompt">$</span>
-      <code id="cmd-unix">curl -fsSL https://toolr.jitinnair.com/install.sh | bash</code>
+      <code id="cmd-unix">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</code>
       <button class="copy" data-copy="cmd-unix">copy</button>
     </div>
     <div class="hero-meta rv">
@@ -271,7 +271,7 @@ footer .links{display:flex;gap:20px;font-size:13px}
     </div>
   </div>
 
-  <div class="term rv" aria-label="ToolR routing demo">
+  <div class="term rv" aria-label="Toutur routing demo">
     <div class="term-bar"><i></i><i></i><i></i><span>~/.tool-router/route — live</span></div>
     <div class="term-body" id="termdemo"></div>
   </div>
@@ -288,7 +288,7 @@ footer .links{display:flex;gap:20px;font-size:13px}
   <div class="sec-head rv">
     <span class="eyebrow">Plain English</span>
     <h2>A concierge between <em class="hu">you</em> and <em class="ai">your agents</em></h2>
-    <p>You describe the job in your own words. ToolR quietly slips the assistant a note — exactly which of its tools fit this job, ranked, with reasons. Nothing fits? It says nothing.</p>
+    <p>You describe the job in your own words. Toutur quietly slips the assistant a note — exactly which of its tools fit this job, ranked, with reasons. Nothing fits? It says nothing.</p>
   </div>
 
   <div class="bento">
@@ -426,7 +426,7 @@ flowchart LR
 sequenceDiagram
     participant U as You
     participant H as Harness
-    participant T as ToolR
+    participant T as Toutur
     participant M as Model
     U->>H: types a request
     H->>T: hook fires
@@ -446,7 +446,7 @@ sequenceDiagram
   <div class="sec-head rv">
     <span class="eyebrow">Coverage</span>
     <h2>Eight harnesses, <em class="ai">one brain</em></h2>
-    <p>Install once; ToolR finds every supported harness, wires the right interceptor for each, then keeps all of it alive through updates.</p>
+    <p>Install once; Toutur finds every supported harness, wires the right interceptor for each, then keeps all of it alive through updates.</p>
   </div>
   <div class="rv" style="overflow-x:auto">
   <table>
@@ -471,7 +471,7 @@ sequenceDiagram
       <p>Detects your harnesses, wires each one, indexes the corpus, verifies with a live card. No accounts, no keys, no cloud.</p>
       <div class="big-install">
         <span class="prompt">$</span>
-        <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);padding:1rem .6rem 1rem .35rem;flex:1;white-space:nowrap;overflow-x:auto">curl -fsSL https://toolr.jitinnair.com/install.sh | bash</code>
+        <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);padding:1rem .6rem 1rem .35rem;flex:1;white-space:nowrap;overflow-x:auto">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</code>
         <button class="copy" data-copy="cmd-unix">copy</button>
       </div>
       <p style="margin-top:22px;font-size:14px">Windows, macOS and step-by-step instructions on the <a href="/install/">install page</a>.</p>
@@ -483,9 +483,9 @@ sequenceDiagram
   <div class="wrap">
     <p>Built by <a href="https://www.jitinnair.com">Jitin Nair</a> · local-first · fail-open · stdlib-only.</p>
     <div class="links">
-      <a href="https://github.com/jitin-neutrinos/ToolR">GitHub</a>
+      <a href="https://github.com/jitin-neutrinos/Toutur">GitHub</a>
       <a href="/install/">Install guide</a>
-      <a href="https://github.com/jitin-neutrinos/ToolR#readme">Docs</a>
+      <a href="https://github.com/jitin-neutrinos/Toutur#readme">Docs</a>
     </div>
   </div>
 </footer>

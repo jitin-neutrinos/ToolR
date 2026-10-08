@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""toolr_tui.py — the ToolR installer's terminal UI (rich, brand-colored).
+"""toolr_tui.py — the Toutur installer's terminal UI (rich, brand-colored).
 
-Pixel-art logo of the wordmark (white ToolR on navy badge, cyan accent
+Pixel-art logo of the wordmark (white Toutur on navy badge, cyan accent
 square), step-by-step installation progress, per-harness status lines.
 
 Run modes:
@@ -13,7 +13,7 @@ from __future__ import annotations
 import sys
 
 # ---- brand ------------------------------------------------------------
-NAVY = "#0a1a3a"      # badge background (deep navy, ToolR brand)
+NAVY = "#0a1a3a"      # badge background (deep navy, Toutur brand)
 NAVY_RGB = (10, 26, 58)
 WHITE = "#ffffff"
 CYAN = "#00c8f0"      # the accent square
@@ -21,8 +21,8 @@ CYAN_RGB = (0, 200, 240)
 GREY = "#7a8aa0"
 
 # ---- pixel art --------------------------------------------------------
-# Hand-coded from the generated wordmark (assets/toolr-wordmark.png):
-# navy rounded badge, white bold ToolR, cyan 2x2 accent after the R's leg.
+# Hand-coded from the generated wordmark (assets/toutur-wordmark.png):
+# navy rounded badge, white bold Toutur, cyan 2x2 accent after the R's leg.
 # Each char: N=navy, W=white, C=cyan, .=edge margin (terminal background).
 LOGO = r"""
   .NNNNNNWWWWWWWNNNNNNNNNNNNNNNWWNNNNNWWWWWWNNNNNNNNNNNN.
@@ -80,7 +80,7 @@ def render_logo(solid: bool = True) -> str:
     return "\n".join(out)
 
 
-def banner(title: str = "ToolR installer") -> str:
+def banner(title: str = "Toutur installer") -> str:
     art = render_logo()
     t = _ansi(title, (255, 255, 255))
     tag = _ansi(TAGLINE, _rgb(CYAN))
