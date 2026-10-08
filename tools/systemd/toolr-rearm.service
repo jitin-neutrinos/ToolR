@@ -1,0 +1,11 @@
+[Unit]
+Description=ToolR: re-arm the router hook inside hermes-gateway after (re)start
+# Pulled in by the hermes-gateway.service drop-in (Wants=), so it runs after
+# every gateway (re)start. Oneshot + fail-open: a failed re-arm never blocks
+# the gateway, and the next restart retries the whole thing.
+After=hermes-gateway.service
+
+[Service]
+Type=oneshot
+ExecStart={python} {script}
+Slice=background.slice

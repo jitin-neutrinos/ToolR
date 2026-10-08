@@ -27,7 +27,7 @@ HASH="$(git -C "$REPO" rev-parse --short=8 HEAD 2>/dev/null || echo nohash)"
 STAMP="${VERSION}-${HASH}"
 say "Publishing ToolR ${STAMP} -> $WWW_DIR"
 
-PAYLOAD=(SKILL.md install.py install.sh toolr_install.py toolr_tui.py scripts references README.md assets/toolr-icon.png)
+PAYLOAD=(SKILL.md install.py install.sh toolr_install.py toolr_tui.py scripts references tools README.md assets/toolr-icon.png)
 
 ARCHIVE="$WWW_DIR/toolr-${STAMP}.tar.gz"
 mkdir -p "$WWW_DIR"
