@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -53,6 +54,65 @@ PAID_RX = re.compile(
 
 SCRATCH = Path(os.path.expanduser(os.environ.get(
     "TOOLR_SCRATCH", "~/.local/share/toolr/scratch/source")))
+
+# --------------------------------------------------- hardening (2026-10-08) --
+# Context: the 2026 skill-marketplace audits (Koi ClawHavoc 341→824+ malicious
+# skills; Snyk ToxicSkills 36.8% of 3,984 flawed; Unit 42 scanner-evading
+# padding + affiliate injection; arXiv:2605.11418/14460 semantic attacks with
+# 0.00% code-scanner detection). Install counts and listing text are NOT
+# safety. Toutur's answer: screen the BODY, flag destructive IOCs, check
+# publisher-name typosquats, install at the reviewed commit, verify the route.
+IOC_PATTERNS = [
+    (r"curl[^\n|]{0,120}\|\s*(?:sudo\s+)?(?:ba)?sh", "curl|sh pipe"),
+    (r"base64\s+(?:-[A-Za-z]*\s+)*(?:--?)?decode\b|base64\s+-[dD]\b", "base64 decode"),
+    (r"\beval\s*\(|\bexec\s*\(", "eval/exec"),
+    (r"\.env\b|\.ssh\b|id_rsa|keychain|credential|\.aws\b|\.kube/config", "credential path"),
+    (r"webhook\.site|pastebin\.com|transfer\.sh|ngrok\.io", "exfil host"),
+    (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "raw IP"),
+    (r"rm\s+-rf\s+/(?:\s|$|\*)", "rm -rf /"),
+    (r"launchctl|crontab\b|systemctl\s+(?:enable|start)", "persistence"),
+    (r"chmod\s+[+-]?(?:[su]|[\drwxst]{3,4})\s+/usr|/etc/sudoers", "privilege edit"),
+]
+
+KNOWN_PUBLISHERS = (
+    "anthropics", "vercel-labs", "vercel", "microsoft", "openai", "google",
+    "supabase", "prisma", "sentry", "remotion-dev", "larksuite", "obra",
+    "mattpocock", "nextlevelbuilder", "hermes", "jitin-neutrinos",
+)
+
+
+def ioc_flags(text: str) -> list[str]:
+    """Destructive/exfil indicators in skill body or scripts. Cheap regexes;
+    a hit is a hard veto in the auto tier and a loud flag in HITL."""
+    text = text or ""
+    return [label for rx, label in IOC_PATTERNS if re.search(rx, text, re.I)]
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if abs(len(a) - len(b)) > 3:
+        return 99                      # early out; only short distances matter
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def typosquat_risk(identifier: str) -> dict:
+    """ClawHavoc spread via near-name publisher clones (clawhub→cllawhub etc).
+    Owner within edit distance <=2 of a known publisher = flag, never veto
+    (forks/renames exist) — auto tier vetoes, HITL shows the flag."""
+    parts = (identifier or "").split("/")
+    owner = parts[1] if parts and parts[0] == "skills-sh" and len(parts) > 1 \
+        else (parts[0] if parts else "")
+    low = owner.lower().strip()
+    for known in KNOWN_PUBLISHERS:
+        d = _levenshtein(low, known.lower())
+        if 0 < d <= 2:
+            return {"risk": True, "note": f"'{owner}' ~ '{known}' (dist {d})"}
+    return {"risk": False, "note": ""}
 
 
 def _log(event: dict) -> None:
@@ -256,16 +316,98 @@ def _save_screen_cache() -> None:
         pass
 
 
+# ------------------------------------------------------------ body inspect --
+
+def fetch_body(candidate: dict) -> dict:
+    """Fetch the candidate's REAL SKILL.md body + inline script contents.
+
+    The 2026 semantic attacks (SCH, arXiv:2605.14460) hide agent-directed
+    instructions in body text that scanners read as documentation — screening
+    the listing alone is exactly the gap they exploit. Returns
+    {"text", "files", "sha", "error"}; error is set on any failure (fail-open
+    for display, fail-closed for auto: body missing => never auto-install).
+    """
+    out: dict = {"text": "", "files": {}, "sha": None, "error": None}
+    ident = candidate.get("identifier") or ""
+    parts = ident.split("/")
+    if len(parts) < 4 or parts[0] != "skills-sh":
+        out["error"] = f"no resolvable repo from {ident!r}"
+        return out
+    _tag, owner, repo, skill = parts[0], parts[1], parts[2], parts[3]
+    repo_dir = SCRATCH / f"inspect-{repo}"
+    try:
+        if repo_dir.exists():
+            shutil.rmtree(repo_dir)
+        repo_dir.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", "--depth", "1", "-q",
+                        f"https://github.com/{owner}/{repo}.git", str(repo_dir)],
+                       timeout=90, check=True)
+        try:
+            head = subprocess.run(["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+                                  capture_output=True, text=True, timeout=15)
+            out["sha"] = (head.stdout or "").strip()[:12] or None
+        except (subprocess.SubprocessError, OSError):
+            pass
+        hits = list(repo_dir.rglob("SKILL.md"))
+        target = next((h.parent for h in hits
+                       if h.parent.name.lower() == skill.lower()), None)
+        if target is None and hits:
+            target = hits[0].parent
+        if target is None:
+            out["error"] = "no SKILL.md in repo"
+            return out
+        sm = target / "SKILL.md"
+        out["text"] = sm.read_text(encoding="utf-8", errors="replace")[:20000]
+        # inline scripts the skill would run — same trust boundary as the body
+        for sp in sorted(target.rglob("*.py")) + sorted(target.rglob("*.sh"))[:6]:
+            try:
+                if sp.stat().st_size <= 65536:
+                    out["files"][sp.name] = sp.read_text(
+                        encoding="utf-8", errors="replace")[:8000]
+            except OSError:
+                continue
+        return out
+    except (subprocess.SubprocessError, OSError) as exc:
+        out["error"] = repr(exc)[-160:]
+        return out
+    finally:
+        shutil.rmtree(repo_dir, ignore_errors=True)
+
+
+def annotate(candidate: dict) -> dict:
+    """Full hardening pass on one candidate: typosquat + body + IOC + sha.
+    Adds keys; never raises; body error is recorded, not fatal (HITL shows it)."""
+    c = dict(candidate)
+    c["typosquat"] = typosquat_risk(c.get("identifier", ""))
+    body = fetch_body(c)
+    c["body"] = body
+    combined = "\n".join(
+        [body.get("text") or ""] + list((body.get("files") or {}).values()))
+    c["ioc"] = ioc_flags(combined) if combined else []
+    return c
+
+
 # ----------------------------------------------------------------- install --
 
 def install_skill(candidate: dict) -> tuple[bool, str]:
-    """Install one skill candidate. Returns (ok, detail)."""
+    """Install one skill candidate. Returns (ok, detail).
+
+    Pinned install: when the candidate carries a reviewed body sha (annotate()
+    ran), install exactly that commit — rug-pull defense per CSA guidance
+    ('reviewed once != trusted forever'; upstream moves must re-trigger
+    review, and the sha guard makes that detectable).
+    """
     ident = candidate["identifier"]
+    sha = ((candidate.get("body") or {}).get("sha")) if isinstance(
+        candidate.get("body"), dict) else None
+    cmd = ["hermes", "skills", "install", ident, "--yes"]
+    if sha:
+        cmd.append(f"--ref={sha}")
     try:
-        p = subprocess.run(["hermes", "skills", "install", ident, "--yes"],
-                           capture_output=True, text=True, timeout=180)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         if p.returncode == 0:
-            return True, (p.stdout or "installed").strip()[-200:]
+            return True, ((p.stdout or "installed").strip() + (
+                f" @ {sha}" if sha else ""))[-200:]
         detail = (p.stderr or p.stdout or "").strip()[-200:]
     except (subprocess.TimeoutExpired, OSError) as exc:
         detail = repr(exc)[-200:]
@@ -273,6 +415,31 @@ def install_skill(candidate: dict) -> tuple[bool, str]:
     if ok:
         return True, f"fallback: {fb}"
     return False, f"{detail} | fallback: {fb}"
+
+
+def install_mcp(candidate: dict) -> tuple[bool, str]:
+    """Install an MCP server candidate into Hermes (the fleet sync mirrors it).
+
+    ALWAYS hitl-gated at the call site — MCPs are never auto-installed. The
+    official registry gives us server names; hermes mcp add wires the entry.
+    """
+    name = (candidate.get("name") or "").split("/")[0].strip()
+    url = candidate.get("url") or ""
+    if not name:
+        return False, "no server name"
+    try:
+        if url.lower().startswith("http"):
+            p = subprocess.run(["hermes", "mcp", "add", name, "--url", url,
+                                "--transport", "http"],
+                               capture_output=True, text=True, timeout=120)
+        else:
+            p = subprocess.run(["hermes", "mcp", "add", name, "npx", "-y", name],
+                               capture_output=True, text=True, timeout=120)
+        if p.returncode == 0:
+            return True, (p.stdout or f"added {name}").strip()[-200:]
+        return False, (p.stderr or p.stdout or "").strip()[-200:]
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return False, repr(exc)[-200:]
 
 
 def _install_fallback(candidate: dict) -> tuple[bool, str]:
@@ -497,6 +664,17 @@ def candidate_serves(candidate: dict, prompt: str) -> bool | None:
         return None
 
 
+def screening_text(c: dict) -> str:
+    """The text Laya screens for a candidate: listing + body + scripts when
+    annotate() has run, listing alone otherwise."""
+    body = c.get("body") or {}
+    if isinstance(body, dict) and (body.get("text") or body.get("files")):
+        return "\n".join(
+            [f"{c.get('name')}. {c.get('description')}", body.get("text") or ""]
+            + list((body.get("files") or {}).values()))
+    return f"{c.get('name')}. {c.get('description')}"
+
+
 def _candidate_ok_cheap(c: dict) -> tuple[bool, str]:
     """Free, instant gates — kind, free-ness, install count. No Laya."""
     if c.get("kind") != "skill":
@@ -510,11 +688,22 @@ def _candidate_ok_cheap(c: dict) -> tuple[bool, str]:
 
 
 def _candidate_ok_auto(c: dict, screen: str | None) -> tuple[bool, str]:
+    """The unattended-install bar. Hardened 2026-10-08 after the marketplace
+    audits: (1) body must have been fetched and screened — a listing-only
+    screen is the exact gap SCH attacks exploit; (2) any IOC hit vetoes;
+    (3) a near-name publisher (typosquat) vetoes. Laya verdict must be 'safe'."""
     ok, why = _candidate_ok_cheap(c)
     if not ok:
         return ok, why
+    body = c.get("body") or {}
+    if not isinstance(body, dict) or not (body.get("text") or "").strip():
+        return False, "body not inspected (auto tier requires body screen)"
     if screen != "safe":
         return False, f"screen={screen}"
+    if c.get("ioc"):
+        return False, f"ioc: {','.join(c['ioc'][:3])}"
+    if (c.get("typosquat") or {}).get("risk"):
+        return False, f"typosquat: {(c['typosquat'].get('note') or '')[:60]}"
     return True, "ok"
 
 
@@ -629,10 +818,22 @@ def auto_install_sync(prompt: str, query: str, cfg: dict,
                   "candidate": c.get("identifier"), "serves": serves,
                   "reason": "judge unsured or said no"})
             continue
-        screen = laya_screen(f"{c.get('name')}. {c.get('description')}")
+        # BODY INSPECTION before screening: the 2026 marketplace attacks hide
+        # instructions in the SKILL.md body — screen what would actually be
+        # read, and harden (IOC + typosquat) on the real content.
+        try:
+            c = annotate(c)
+        except Exception as exc:
+            _log({"event": "annotate_error", "key": key,
+                  "candidate": c.get("identifier"), "error": repr(exc)[:120]})
+            c.setdefault("body", {"text": "", "files": {}, "sha": None,
+                                  "error": "annotate failed"})
+        screen = laya_screen(screening_text(c))
         screened += 1
         ok, why = _candidate_ok_auto(c, screen)
         if not ok:
+            _log({"event": "auto_veto", "key": key,
+                  "candidate": c.get("identifier"), "reason": why})
             continue
         installed, detail = install_skill(c)
         wired = wire_fleet() if installed else {}
@@ -640,8 +841,9 @@ def auto_install_sync(prompt: str, query: str, cfg: dict,
             wired["harnesses"] = distribute_skill(c["name"])
         gaptrack.mark_installed(key, c["name"])
         _log({"event": "auto_install", "query": query[:120], "key": key,
-              "candidate": c["identifier"], "ok": installed, "detail": detail,
-              "wired": wired})
+              "candidate": c["identifier"],
+              "sha": (c.get("body") or {}).get("sha"), "ok": installed,
+              "detail": detail, "wired": wired})
         return {"installed": c["name"], "ok": installed, "detail": detail,
                 "wired": wired}, entry
     _log({"event": "auto_install_skip", "query": query[:120], "key": key,
@@ -652,11 +854,59 @@ def auto_install_sync(prompt: str, query: str, cfg: dict,
 
 
 def propose(query: str) -> list[dict]:
-    """HITL shortlist: screened + annotated, for user approval."""
+    """HITL shortlist: fully hardened for approval — each candidate carries
+    its real body, IOC flags, typosquat verdict and reviewed commit sha, and
+    the screen covers body+scripts, not just the listing."""
     out = []
     for c in search_registries(query):
-        c["screen"] = laya_screen(f"{c.get('name')}. {c.get('description')}")
+        try:
+            c = annotate(c)
+        except Exception:
+            c.setdefault("body", {"text": "", "files": {}, "sha": None,
+                                  "error": "annotate failed"})
+        c["screen"] = laya_screen(screening_text(c))
         out.append(c)
         if len(out) >= 6:
             break
     return out
+
+
+def verify_route(prompt: str, cwd: str = ".") -> dict:
+    """Closed loop: re-route the ORIGINAL prompt and check the installed skill
+    now surfaces in the picks. The #1 post-install failure mode is 'installed
+    but never fires' (almost always a description that never matches), and no
+    registry does this check. Fail-open: a verification error returns ok=False
+    with detail — it must never break the install report."""
+    try:
+        env = dict(os.environ)
+        env["ROUTER_NO_DEFER"] = "1"
+        env["ROUTER_REWRITE_MODEL"] = ""
+        p = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("route.py")),
+             "--no-rewrite", "--json", "--cwd", cwd, prompt],
+            capture_output=True, text=True, timeout=60, env=env)
+        data = json.loads(p.stdout or "{}")
+    except Exception as exc:
+        return {"ok": False, "detail": repr(exc)[:120], "picks": []}
+    picks = data.get("picks") or []
+    return {"ok": _pick_matches(picks, installed_name()),
+            "detail": f"top picks: {picks[:5]}" if picks else "no picks",
+            "picks": picks[:5]}
+
+
+def _pick_matches(picks: list, want: str | None) -> bool:
+    if not want:
+        return False
+    norm = lambda s: s.split(":", 1)[-1].lower().replace("-", "").replace("_", "")
+    w = norm(want)
+    return any(w in norm(p) for p in picks)
+
+
+def installed_name() -> str | None:
+    """Name of the most recently sourced install (gaps.json 'installed' fields)."""
+    try:
+        data = gaptrack.load()
+        names = [e.get("installed") for e in data.values() if e.get("installed")]
+        return names[-1] if names else None
+    except Exception:
+        return None

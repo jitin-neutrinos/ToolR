@@ -183,7 +183,8 @@ class _ArgParser(argparse.ArgumentParser):
     extra words. difflib is stdlib and the option list is tiny, so this is free.
     """
     OPTIONS = ("--top", "-n", "--count", "--no-rewrite", "--source",
-               "--source-remove", "--record", "--json", "--cwd", "--event",
+               "--source-remove", "--finder", "--finder-install",
+               "--record", "--json", "--cwd", "--event",
                "--hook", "--selftest", "--help", "-h")
 
     def error(self, message):  # noqa: D401
@@ -220,6 +221,12 @@ def main() -> int:
                          "removed 2026-10-05 so this changes nothing")
     ap.add_argument("--source", action="store_true",
                     help="HITL: search registries for the query, print screened candidates")
+    ap.add_argument("--finder", action="store_true",
+                    help="interactive skill finder: search + inspect real skill "
+                         "bodies + IOC/typosquat/screen + pin, all before approval")
+    ap.add_argument("--finder-install", default=None, metavar="N[:SHA]",
+                    help="install finder candidate N at its reviewed commit, "
+                         "then verify the route fires (HITL: you choose N)")
     ap.add_argument("--source-remove", default=None, metavar="SKILL",
                     help="undo a sourced skill (removes sourced/SKILL + reindexes)")
     ap.add_argument("--selftest", action="store_true", help="run the router's own checks")
@@ -299,6 +306,104 @@ def main() -> int:
             print(f"   id: {c['identifier']}")
             print(f"   {(c.get('description') or '')[:160]}")
         return 0
+
+    if args.finder:
+        prompt = " ".join(args.prompt).strip()
+        if not prompt:
+            print("usage: route.py --finder \"<what you need>\"")
+            return 0
+        try:
+            import source as _src
+            cands = _src.propose(prompt)   # annotate + body+script screen inside
+        except Exception as exc:
+            print(f"finder failed (fail-open): {exc!r}")
+            return 0
+        if not cands:
+            print(f"No free candidates found for: {prompt}")
+            return 0
+        print(f"# Toutur finder: {prompt}\n"
+              f"# Each candidate was inspected at its REAL SKILL.md body and\n"
+              f"# scripts, injection-screened, IOC-scanned and typosquat-checked.\n"
+              f"# NOTHING is installed until you choose:\n"
+              f"#   route --finder-install <n>  (pins to the reviewed commit)\n")
+        for i, c in enumerate(cands, 1):
+            body = c.get("body") or {}
+            flags = [f"screen={c.get('screen') or 'unscreened'}"]
+            if c.get("ioc"):
+                flags.append("IOC:" + ",".join(c["ioc"][:3]))
+            ts = c.get("typosquat") or {}
+            if ts.get("risk"):
+                flags.append("TYPOSQUAT:" + (ts.get("note") or "")[:40])
+            if body.get("error"):
+                flags.append(f"body-error:{str(body['error'])[:40]}")
+            installs = c.get("installs")
+            installs = f"{installs:,}" if isinstance(installs, int) else "?"
+            sha = body.get("sha") or "?"
+            print(f"{i}. [{c['kind']}] {c['name']}  ({c.get('source')}, "
+                  f"{installs} installs, commit {sha})")
+            print(f"   id: {c['identifier']}")
+            print(f"   {(c.get('description') or '')[:150]}")
+            print(f"   flags: {'; '.join(flags)}")
+            snippet = " ".join((body.get("text") or "").split())[:200]
+            if snippet:
+                print(f"   body: {snippet}...")
+        return 0
+
+    if args.finder_install:
+        prompt = " ".join(args.prompt).strip()
+        spec = (args.finder_install or "").split(":", 1)
+        try:
+            n, want_sha = int(spec[0]), (spec[1] if len(spec) > 1 else None)
+            import source as _src
+            cands = _src.propose(prompt)
+            if not (1 <= n <= len(cands)):
+                print(f"candidate {n} out of range (1..{len(cands)}); "
+                      f"re-run --finder to list candidates")
+                return 0
+            c = cands[n - 1]
+            sha = (c.get("body") or {}).get("sha")
+            if want_sha and sha and want_sha != sha:
+                print(f"REFUSED: reviewed sha {want_sha} != current {sha}. "
+                      f"The repo moved since review — re-run --finder and "
+                      f"re-review before installing.")
+                return 1
+            blocked = list(c.get("ioc") or [])
+            if (c.get("typosquat") or {}).get("risk"):
+                blocked.append("typosquat")
+            if blocked:
+                print(f"REFUSED: candidate {n} flagged ({'; '.join(blocked)}). "
+                      f"Flagged candidates are never installed.")
+                return 1
+            if c.get("kind") == "mcp":
+                ok, detail = _src.install_mcp(c)
+            else:
+                ok, detail = _src.install_skill(c)
+            if not ok:
+                print(f"install failed: {detail}")
+                return 1
+            wired: dict = {}
+            if c.get("kind") == "skill":
+                wired = _src.wire_fleet()
+                wired["harnesses"] = _src.distribute_skill(c["name"])
+                try:
+                    k = _src.gaptrack.resolve_key(prompt)
+                    if k:
+                        _src.gaptrack.mark_installed(k, c["name"])
+                except Exception:
+                    pass
+            print(f"installed {c['name']} "
+                  f"({'pinned @ ' + sha if sha else 'unpinned'})")
+            print(f"wiring: reindex={wired.get('reindex')}, "
+                  f"fleet={wired.get('fleet')}, "
+                  f"harnesses={wired.get('harnesses')}")
+            if c.get("kind") == "skill":
+                v = _src.verify_route(prompt, args.cwd or ".")
+                print("verify: ROUTE FIRES" if v.get("ok") else
+                      f"verify: not in top picks yet — {str(v.get('detail'))[:120]}")
+            return 0
+        except Exception as exc:
+            print(f"finder-install failed (fail-open): {exc!r}")
+            return 0
 
     if args.record:
         record(args.record)

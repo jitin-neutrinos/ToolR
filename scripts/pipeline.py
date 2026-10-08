@@ -420,9 +420,12 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
                      f"it will route from the next turn. Say 'undo sourcing' "
                      f"to remove.")
         elif entry.get("served") is True and not hit:
-            card += (f"\n\n**Oracle: no local capability serves this.** To search "
-                     f"free registries (installed only on your approval): "
-                     f"~/.tool-router/route --source \"{prompt[:60]}\"")
+            card += (f"\n\n**Oracle: no local capability serves this.** The "
+                     f"interactive skill finder can shop skills.sh + the MCP "
+                     f"registry — search, inspect the real SKILL.md body, "
+                     f"injection-screen, install pinned to the reviewed commit, "
+                     f"all gated on your approval: "
+                     f"`~/.tool-router/route --finder \"{prompt[:60]}\"`")
     except Exception:
         pass  # sourcing must never break routing
 

@@ -151,6 +151,34 @@ picks; lower it toward 0.2 to see more candidates. `enabled: false` silences the
 router without uninstalling it. `mcp_hints` exists because no MCP config format
 carries a description; the shipped defaults cover common servers.
 
+## Sourcing — the skill finder
+
+When no local capability serves a need, two lanes find one on the free
+registries (skills.sh, GitHub, official MCP registry). Nothing is ever
+installed without approval except by the auto lane's hardened bar.
+
+- **Interactive (HITL, the default):** `~/.tool-router/route --finder "<need>"`
+  searches, then inspects each candidate's REAL SKILL.md body + scripts,
+  injection-screens (Laya) the full text, scans destructive IOCs
+  (curl|sh, base64-decode, credential paths, exfil hosts, raw IPs,
+  persistence), and flags near-name publishers (typosquat). Candidates show
+  commit SHAs. Install with `route --finder-install <n>` — pinned to the
+  reviewed commit, refused if the repo moved since review — and the loop
+  re-routes the original prompt to prove the new skill actually fires
+  ("installed but never fires" is the #1 post-install failure). MCP servers
+  are installable candidates but always HITL, never auto.
+- **Auto (repeated gaps only):** after the SAME intent gap repeats ≥3 times
+  AND the gap oracle confirms nothing local serves it, a candidate may
+  install unattended — but only a skill that is free, ≥1000 installs,
+  relevance-judged (gemini-flash), body-inspected, screened "safe" on
+  body+scripts, IOC-clean, and not a typosquat. Any veto degrades to HITL;
+  every veto and install lands in `sourcing.log`.
+
+Why the body screen: the 2026 marketplace audits (Koi ClawHavoc, Snyk
+ToxicSkills, Unit 42) showed semantic attacks hide agent-directed
+instructions in SKILL.md bodies that code scanners read as documentation
+(0% detection). Install counts and listing trust are not safety.
+
 ## What this does not do
 
 - **It cannot force a skill to load.** No harness hook can invoke a skill or
