@@ -53,6 +53,7 @@ rm -f "$TARLIST"
   chmod +x install.sh
   cp "$REPO/install.ps1" install.ps1
   cp "$REPO/assets/toutur-icon.png" toutur-icon.png
+  cp "$REPO"/branding/favicon/*.png "$REPO"/branding/favicon/favicon.ico .
   # the landing page must exist as browsable files, not just inside the
   # tarball — serve-www maps / to /landing/index.html
   rm -rf "$WWW_DIR/landing"
