@@ -27,10 +27,10 @@ body{
 }
 h1,h2,h3{font-family:'Playfair Display',serif;font-weight:500;letter-spacing:-.02em;line-height:1.1}
 .mono{font-family:'JetBrains Mono',monospace}
-.eyebrow{display:inline-flex;align-items:center;gap:.5rem;font-family:'JetBrains Mono',monospace;
+.eyebrow{display:inline-flex;align-self:flex-start;align-items:center;gap:.5rem;font-family:'JetBrains Mono',monospace;
   font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--cyan);
   background:var(--cyan-soft);border:1px solid rgba(34,211,238,.25);
-  padding:.35rem .8rem;border-radius:999px}
+  padding:.35rem .8rem;border-radius:999px;width:fit-content}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 section{padding:96px 0}
 a{color:var(--cyan);text-decoration:none}
@@ -68,15 +68,17 @@ nav .gh:hover{background:var(--cyan-soft)}
 .install .prompt{color:var(--teal);padding:1rem 0 1rem 1.15rem;font-family:'JetBrains Mono',monospace;font-size:13px}
 .install code{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);
   padding:1rem .6rem 1rem .35rem;flex:1;white-space:nowrap;overflow-x:auto}
-.copy{border:none;background:rgba(255,255,255,.05);color:var(--muted);cursor:pointer;
+.copy{border:none;background:rgba(255,255,255,.07);color:#c8d2dd;cursor:pointer;
   font-family:'JetBrains Mono',monospace;font-size:11.5px;padding:.9rem 1.1rem;
   border-left:1px solid var(--hairline);transition:all .4s var(--ease)}
 .copy:hover{color:var(--cyan);background:var(--cyan-soft)}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:46px;max-width:760px}
-.kpi{border:1px solid var(--hairline);border-radius:16px;padding:18px 20px;background:rgba(18,18,26,.6)}
-.kpi b{display:block;font-size:1.55rem;font-weight:600;color:var(--text)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:46px;max-width:820px}
+.kpi{border:1px solid var(--hairline);border-radius:16px;padding:18px 20px;background:rgba(18,18,26,.6);
+  display:flex;flex-direction:column;gap:6px}
+.kpi b{display:block;font-size:1.55rem;font-weight:600;color:var(--text);white-space:nowrap}
 .kpi b i{font-style:normal;color:var(--cyan)}
-.kpi span{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+.kpi span{font-size:11.5px;color:#a6aebc;letter-spacing:.05em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;
+  white-space:nowrap}
 
 /* ---------- cards ---------- */
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px}
@@ -174,8 +176,8 @@ footer .links{display:flex;gap:20px;font-size:13px}
     <button class="copy" data-copy="cmd-unix">copy</button>
   </div>
   <div class="kpis rv">
-    <div class="kpi"><b>777</b><span>capabilities indexed</span></div>
-    <div class="kpi"><b>&lt;<i>300</i>ms</b><span>per route, warm</span></div>
+    <div class="kpi"><b>777</b><span>capabilities</span></div>
+    <div class="kpi"><b>&lt;<i>300</i>ms</b><span>warm route</span></div>
     <div class="kpi"><b>8</b><span>harnesses wired</span></div>
     <div class="kpi"><b>44</b><span>self-checks green</span></div>
   </div>
