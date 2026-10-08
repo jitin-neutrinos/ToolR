@@ -127,10 +127,17 @@ def record_gap(prompt: str, cfg: dict) -> dict:
 
 def mark_installed(key: str, what: str) -> None:
     data = load()
-    if key in data:
-        data[key]["installed"] = what
-        data[key]["promoted"] = False
-        _save(data)
+    if key not in data:
+        # An install marker can arrive before any route recorded the intent
+        # (route --finder-install searches don't record gaps; measured
+        # 2026-10-08: the marker silently no-op'd and verify then anchored to
+        # the wrong intent). Create the entry instead of dropping the marker.
+        now = int(time.time())
+        data[key] = {"first": now, "last": now, "count": 0,
+                     "tokens": key.split(), "examples": []}
+    data[key]["installed"] = what
+    data[key]["promoted"] = False
+    _save(data)
 
 
 def unmark_installed(key: str, reason: str = "manual") -> bool:
