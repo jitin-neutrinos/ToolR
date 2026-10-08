@@ -105,9 +105,21 @@ def _top_combined(ranked: list[dict], cfg: dict, n: int,
          else others).append(r)
     out, seen_keys = [], set()
     quota = max(0, int(cfg.get("kind_quota", rc.DEFAULT_CONFIG["kind_quota"])))
-    if quota:                              # reserve best slots per non-skill kind first
+    # Quota reserves slots for NON-SKILL kinds only — that is the contract the
+    # card's coverage promise makes ("MCPs/agents/commands get guaranteed
+    # slots"). Splitting skills/others by the tail CUT (below) leaks sub-cut
+    # SKILL rows into `others`, and when a dominant leader raises the cut,
+    # every other skill lands there: the quota pass then filled ALL slots with
+    # them and the fill loop never ran. Measured 2026-10-08: BM25 #1 at 1.87
+    # (cut 1.029, 40+ skills sub-cut) vanished from the card entirely while
+    # 0.915 rendered on top. Quota on skill-kind rows is the fill loop's job,
+    # best-score-first.
+    SKILL_KINDS = ("skill", "plugin-skill")
+    if quota:
         per_kind: dict[str, list[dict]] = {}
-        for r in others:                   # already in fused-score order
+        for r in others:
+            if r["kind"] in SKILL_KINDS:
+                continue
             per_kind.setdefault(r["kind"], []).append(r)
         for rs in per_kind.values():
             for r in rs[:quota]:
@@ -143,6 +155,16 @@ def _top_combined(ranked: list[dict], cfg: dict, n: int,
             if key not in seen_keys:
                 out.append(r)
                 seen_keys.add(key)
+    # Restore the score-order invariant before returning. The quota pass above
+    # inserts best-per-kind FIRST, appending the score leader behind quota
+    # rows — and every downstream consumer (_score_cliff's largest-relative-
+    # drop walk, diversity()'s "rows must be in score order" contract) assumes
+    # fused-score order. Measured 2026-10-08: a dominant BM25 #1 (1.52, six
+    # token hits incl. the verbatim 'cprofile') landed behind two quota picks,
+    # the cliff stage cut the artificial 55% drop, and the leader vanished
+    # from the card while rendering 0.636 on top. Quota is a membership
+    # policy; score order is the ordering contract. Both hold now.
+    out.sort(key=lambda r: -float(r.get("score", 0.0)))
     return out[:n]
 
 

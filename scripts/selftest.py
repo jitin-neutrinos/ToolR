@@ -1135,6 +1135,36 @@ def t_fleet_assets_indexed():
     assert all(i["desc"] for i in items), "fleet items must carry real descriptions"
 
 
+def t_quota_keeps_score_order():
+    """Quota membership must not break the score-order contract — or eat the card.
+
+    Regression for 2026-10-08: a dominant BM25 #1 ('profile python code with
+    cProfile and find memory leaks' -> python-performance-optimization at
+    1.87, six token hits) raised the tail cut to 1.029, so 40+ sub-cut SKILL
+    rows fell into `others`; the quota pass (splitting others by CUT, not by
+    KIND) filled every slot with them and the fill loop never ran. The true
+    leader vanished from the card entirely while 0.915 rendered on top.
+    Quota is for non-skill kinds; skills flow through the fill loop.
+    """
+    import pipeline
+    ranked = [
+        {"kind": "skill", "name": "leader", "score": 1.52},
+        {"kind": "skill", "name": "second", "score": 0.85},
+        {"kind": "mcp", "name": "mcp-a", "score": 0.64},
+        {"kind": "agent", "name": "agent-a", "score": 0.63},
+        {"kind": "skill", "name": "tail", "score": 0.50},
+        {"kind": "skill", "name": "tail2", "score": 0.40},
+    ]
+    cfg = {"min_score": 0.28, "tail_ratio": 0.55, "kind_quota": 2, "top_n": 10}
+    out = pipeline._top_combined(ranked, cfg, 10)
+    scores = [float(r["score"]) for r in out]
+    names = [r["name"] for r in out]
+    assert out[0]["name"] == "leader", f"leader buried/vanished: {names}"
+    assert scores == sorted(scores, reverse=True), f"quota broke score order: {scores}"
+    assert "mcp-a" in names and "agent-a" in names, f"quota kinds missing: {names}"
+    assert len(out) >= 5, f"card under-filled by quota leak: {names}"
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("t_")]
     failed = 0
