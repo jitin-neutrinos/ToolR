@@ -876,22 +876,45 @@ def verify_route(prompt: str, cwd: str = ".") -> dict:
     now surfaces in the picks. The #1 post-install failure mode is 'installed
     but never fires' (almost always a description that never matches), and no
     registry does this check. Fail-open: a verification error returns ok=False
-    with detail — it must never break the install report."""
-    try:
-        env = dict(os.environ)
-        env["ROUTER_NO_DEFER"] = "1"
-        env["ROUTER_REWRITE_MODEL"] = ""
-        p = subprocess.run(
-            [sys.executable, str(Path(__file__).with_name("route.py")),
-             "--no-rewrite", "--json", "--cwd", cwd, prompt],
-            capture_output=True, text=True, timeout=60, env=env)
-        data = json.loads(p.stdout or "{}")
-    except Exception as exc:
-        return {"ok": False, "detail": repr(exc)[:120], "picks": []}
-    picks = data.get("picks") or []
-    return {"ok": _pick_matches(picks, installed_name()),
-            "detail": f"top picks: {picks[:5]}" if picks else "no picks",
-            "picks": picks[:5]}
+    with detail — it must never break the install report.
+
+    Retries once after a short settle: the route can transiently undershoot
+    (reindex swap in flight, or the dense-lane breaker flapping when Ollama
+    hiccups — measured 2026-10-08) and a single sample would report a false
+    'never fires' for a skill that scores #1 on the next route.
+
+    Picks source: `route.py --json` emits the hook envelope (card TEXT only,
+    no pick list), so read the state file every route writes instead —
+    data.get('picks') was always [] and verify reported 'no picks' forever
+    (measured + fixed 2026-10-08).
+    """
+    state_path = rc.index_path().parent / "last_route.json"
+    last: dict = {"ok": False, "detail": "not attempted", "picks": []}
+    for attempt in range(2):
+        try:
+            env = dict(os.environ)
+            env["ROUTER_NO_DEFER"] = "1"
+            env["ROUTER_REWRITE_MODEL"] = ""
+            p = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("route.py")),
+                 "--no-rewrite", "--json", "--cwd", cwd, prompt],
+                capture_output=True, text=True, timeout=60, env=env)
+            json.loads(p.stdout or "{}")     # card; validates the run exited sanely
+        except Exception as exc:
+            return {"ok": False, "detail": repr(exc)[:120], "picks": []}
+        picks: list = []
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            picks = state.get("picks") or []
+        except (OSError, ValueError):
+            pass
+        last = {"ok": _pick_matches(picks, installed_name(prompt)),
+                "detail": f"top picks: {picks[:5]}" if picks else "no picks",
+                "picks": picks[:5]}
+        if last["ok"] or attempt == 1:
+            return last
+        time.sleep(3)               # let the reindex swap land, then re-check
+    return last
 
 
 def _pick_matches(picks: list, want: str | None) -> bool:
@@ -902,10 +925,21 @@ def _pick_matches(picks: list, want: str | None) -> bool:
     return any(w in norm(p) for p in picks)
 
 
-def installed_name() -> str | None:
-    """Name of the most recently sourced install (gaps.json 'installed' fields)."""
+def installed_name(prompt: str | None = None) -> str | None:
+    """Name of the sourced install for THIS intent (or the latest one).
+
+    gaptrack keys intents and marks `installed` per intent — the latest
+    install overall is the wrong anchor when several intents were sourced
+    (measured 2026-10-08: 'find-skills' from an older gap made verify_route
+    demand the wrong skill in picks and report a false negative). When a
+    prompt is given, its own intent key wins; fallback to the most recent.
+    """
     try:
         data = gaptrack.load()
+        if prompt:
+            key = gaptrack.resolve_key(prompt)
+            if key and data.get(key, {}).get("installed"):
+                return data[key]["installed"]
         names = [e.get("installed") for e in data.values() if e.get("installed")]
         return names[-1] if names else None
     except Exception:

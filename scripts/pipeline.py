@@ -115,6 +115,14 @@ def _top_combined(ranked: list[dict], cfg: dict, n: int,
     # 0.915 rendered on top. Quota on skill-kind rows is the fill loop's job,
     # best-score-first.
     SKILL_KINDS = ("skill", "plugin-skill")
+    # Quota must never crowd the score leader out: with a small depth n (the
+    # complexity layer hands 4 to a "simple" prompt) and >=2 noise kinds, the
+    # quota pass filled ALL n slots and the #1 row (3.73, measured
+    # 2026-10-08: 'remove the background from a photo' routing clean_gone
+    # 0.72 on top) vanished from the card. Reserve one slot for the best
+    # skill whenever one cleared the floor — the fill loop spends it
+    # best-score-first, so the leader takes it.
+    quota_cap = n - (1 if any(r["kind"] in SKILL_KINDS for r in skills) else 0)
     if quota:
         per_kind: dict[str, list[dict]] = {}
         for r in others:
@@ -123,11 +131,11 @@ def _top_combined(ranked: list[dict], cfg: dict, n: int,
             per_kind.setdefault(r["kind"], []).append(r)
         for rs in per_kind.values():
             for r in rs[:quota]:
-                if len(out) >= n:
+                if len(out) >= max(quota_cap, 0):
                     break
                 out.append(r)
                 seen_keys.add((r["kind"], r["name"]))
-            if len(out) >= n:
+            if len(out) >= max(quota_cap, 0):
                 break
     for r in skills + others:              # fill the rest, best score first
         if len(out) >= n:
