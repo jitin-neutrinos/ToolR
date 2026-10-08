@@ -1354,6 +1354,7 @@ def save_index(index: dict) -> Path:
 
 
 DEFAULT_CONFIG = {
+    "adoption_floor": 0.75,   # owner policy: harness must load >=75% of routed picks
     "max_skills": 4,
     "min_score": 0.28,   # relative confidence, 0..~1.4 (see score())
     "tail_ratio": 0.55,

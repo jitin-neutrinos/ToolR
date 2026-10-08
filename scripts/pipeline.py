@@ -305,10 +305,25 @@ def run(prompt: str, cwd, cfg: dict | None = None, index: dict | None = None,
     authority_ok = True
     authority_note = ""
     try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _root = str(_Path(__file__).resolve().parent.parent)
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
         import authority as _auth
-        authority_ok = _auth.ensure_authority()
-        if not authority_ok:
+        heal = _auth.selfheal()
+        authority_ok = bool(heal.get("mandate_ok")) and heal.get("shim_ok") is not False
+        if not heal.get("mandate_ok"):
             authority_note = _auth.card_notice()
+        elif heal.get("repaired"):
+            authority_note = ("_ToolR authority self-heal re-applied: "
+                              + ", ".join(heal["repaired"])
+                              + " (an update or healing pass had undone it). _")
+        elif heal.get("shim_ok") is False:
+            authority_note = ("_ToolR interception shim on harness '"
+                              + str(heal.get("harness") or "?")
+                              + "' missing and not auto-repairable — run "
+                              "install.py. Routing still served this card._")
     except Exception:
         pass
     t0 = time.monotonic()

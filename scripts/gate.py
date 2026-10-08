@@ -62,6 +62,17 @@ def main() -> int:
 
     if args.loaded:
         state["needs_skills"] = False
+        # Adoption ledger: a Skill load within a routed prompt = one "kept".
+        # Counted once per prompt_id; feeds the 75% floor check in --check.
+        try:
+            led = state.get("adoption") or {"kept": 0, "total": 0}
+            if state.get("prompt_id") and state.get("kept_for") != state.get("prompt_id"):
+                led["kept"] = int(led.get("kept", 0)) + 1
+                state["kept_for"] = state.get("prompt_id")
+            state["adoption"] = led
+        except Exception:
+            pass
+        state.pop("denied_for_second", None)
         _write(state)
         # Record the loaded pick into learned.json — the usage-prior signal
         # (research note R7). The Skill tool's input carries the loaded name;
@@ -111,17 +122,37 @@ def main() -> int:
     if not picks:
         return allow()
 
+    # Owner policy (2026-10-08): the harness+model must load >=75% of the
+    # routed picks. The deny-once lever enforces per prompt; this tracks the
+    # running ratio across prompts and hardens the gate when it sags: under
+    # the floor, the "once" becomes "twice" (a second refusal on the retry),
+    # which is the smallest escalation that changes model behavior without
+    # becoming a loop. Ratio rides in last_route.json (rewritten per prompt)
+    # so no second state file is needed.
+    try:
+        hist = state.get("adoption") or {"kept": 0, "total": 0}
+        rate = (hist["kept"] / hist["total"]) if hist.get("total") else 1.0
+        floor = float(rc.DEFAULT_CONFIG.get("adoption_floor", 0.75))
+        below_floor = hist.get("total", 0) >= 3 and rate < floor
+    except Exception:
+        below_floor = False
+
     state["denied_for"] = pid  # one refusal per prompt, never a loop
+    if below_floor:
+        state["denied_for_second"] = pid  # escalation window (see --loaded)
     _write(state)
     tool = payload.get("tool_name", "this edit")
     names = ", ".join(f"Skill({n})" for n in picks[:3])
+    escalate = ("\nSECOND refusal: adoption is below the 75% floor (load what "
+                "the router names, or route with --top 1 for a single pick)."
+                if below_floor else "")
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
         "permissionDecisionReason": (
             f"tool-router: load the routed skills before {tool}. Invoke {names} first "
             f"(or say in one line why they do not apply, then retry — this gate fires once "
-            f"per request)."
+            f"per request).{escalate}"
         ),
     }}))
     return 0

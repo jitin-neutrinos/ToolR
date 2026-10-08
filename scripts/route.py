@@ -90,8 +90,18 @@ def _load_state() -> dict:
 def _save_state(picks: list[str], prompt_id: str, skills_needed: bool) -> None:
     try:
         STATE.parent.mkdir(parents=True, exist_ok=True)
+        # Carry the adoption ledger forward (rewritten per prompt; kept/total
+        # feed the 75% floor in gate.py --check). 'total' counts this routed
+        # prompt — the denominator of the harness+model load ratio.
+        try:
+            prev = json.loads(STATE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            prev = {}
+        led = prev.get("adoption") or {"kept": 0, "total": 0}
+        led["total"] = int(led.get("total", 0)) + 1
         STATE.write_text(json.dumps({"picks": picks, "prompt_id": prompt_id,
-                                     "needs_skills": skills_needed, "at": int(time.time())}),
+                                     "needs_skills": skills_needed,
+                                     "adoption": led, "at": int(time.time())}),
                          encoding="utf-8")
     except OSError:
         pass
