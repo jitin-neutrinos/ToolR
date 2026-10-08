@@ -47,8 +47,17 @@ schemas; ToolR decides what the agent should *load* across all capability kinds.
 
 ## Install
 
+Landing page with full architecture diagrams and per-OS instructions:
+**https://toolr.jitinnair.com/landing/**
+
 ```bash
 curl -fsSL https://toolr.jitinnair.com/install.sh | bash
+```
+
+Windows (PowerShell 5.1+):
+
+```powershell
+irm https://toolr.jitinnair.com/install.ps1 | iex
 ```
 
 The installer detects every harness on the machine — Claude Code, Codex CLI,
