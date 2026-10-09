@@ -23,8 +23,7 @@ else
   exit 1
 fi
 
-# 2. Detect + install (install.py is idempotent; toolr_install.py adds the TUI)
+# 2. Detect + install via the branded TUI (install.py stays the engine and
+#    remains directly runnable; the TUI is a wrapper, not a fork).
 echo ""
-python3 "$DIR/install.py" --check || true
-echo ""
-exec python3 "$DIR/install.py" "$@"
+exec python3 "$DIR/toolr_install.py" "$@"

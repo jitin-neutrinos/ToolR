@@ -1,131 +1,164 @@
 #!/usr/bin/env python3
-"""toolr_tui.py — the Toutur installer's terminal UI (rich, brand-colored).
+"""toolr_tui.py — the Toutur installer's terminal UI.
 
-Pixel-art logo of the wordmark (white Toutur on navy badge, cyan accent
-square), step-by-step installation progress, per-harness status lines.
+Brand-exact: colors mirror toutur.jitinnair.com (void/midnight + blue/blue-2
+accents) and the monogram is pixel-extracted from assets/toutur-icon.png
+(lowercase t + motion streaks, 56x18) — not hand-drawn. '#' = white ink,
+'+' = blue streak, '.' = blank.
 
-Run modes:
-  show          just render the logo + banner (for demos/screenshots)
-  install       run the full installation (delegates to install.py logic)
+Every helper gates color on _color_ok(): piped output / NO_COLOR gets a
+clean static banner with zero escape codes, so `curl | bash` logs stay sane.
 """
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 
-# ---- brand ------------------------------------------------------------
-NAVY = "#0a1a3a"      # badge background (deep navy, Toutur brand)
-NAVY_RGB = (10, 26, 58)
-WHITE = "#ffffff"
-CYAN = "#00c8f0"      # the accent square
-CYAN_RGB = (0, 200, 240)
-GREY = "#7a8aa0"
+# ---- brand (mirrors landing/index.html :root) --------------------------
+VOID_RGB = (10, 10, 15)        # #0a0a0f  page background
+MIDNIGHT_RGB = (18, 18, 26)    # #12121a  panel background
+BLUE_RGB = (34, 211, 238)      # #22d3ee  primary accent
+BLUE2_RGB = (56, 189, 248)     # #38bdf8  gradient pair / success
+TEXT_RGB = (248, 250, 252)     # #f8fafc  primary text
+MUTED_RGB = (147, 155, 171)    # #939bab  secondary text
+HAIRLINE_RGB = (52, 58, 70)    # rules/dividers on dark
+FAIL_RGB = (248, 113, 113)     # #f87171  failure only
 
-# ---- pixel art --------------------------------------------------------
-# Hand-coded from the generated wordmark (assets/toutur-wordmark.png):
-# navy rounded badge, white bold Toutur, cyan 2x2 accent after the R's leg.
-# Each char: N=navy, W=white, C=cyan, .=edge margin (terminal background).
-LOGO = r"""
-  .NNNNNNWWWWWWWNNNNNNNNNNNNNNNWWNNNNNWWWWWWNNNNNNNNNNNN.
-  .NNNNNNWWWWWWWWNNNNNNNNNNNNNWWWWNNNNWWWWWWWWNNNNNNNNNN.
-  .NNNNNNNWWNWWNNNNNWWWWWNNWWNNNWWWNNWWNNWWWWNNNNNNNNNNN.
-  .NNNNNNNWWNWWNNNNWWNNNNWWWWNNNNWWNNWWNNNNNNNNNNNNNNNNN.
-  .NNNNNNNWWNWWNNNNWWNNNNWWNNNNNNWWNNNWWWWWWNNNNNNNNNNNN.
-  .NNNNNNNWWNWWNNNNWWNNNNWWNNNNNNWWNNNNWWNNNNNNNNNNNNNNN.
-  .NNNNNNNWWNWWNNNNNWWWWWNNNNNNNNWWNNNNWWNNNNCCNNNNNNNNN.
-  .NNNNNNNWWNWWNNNNNNNNNNNNNNNNNNWWNNNNWWNNNCCNNNNNNNNNN.
-  .NNNNNNNWWNWWWWWWWWWWWWWWWNNNNNWWNNNNNWWWCCNNNNNNNNNNN.
-  .NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN.
-"""
-
-
-def _pixel(ch: str) -> str:
-    if ch == "N":
-        return _bg(BLOCK, NAVY_RGB)
-    if ch == "W":
-        return _ansi(BLOCK, (245, 248, 252))
-    if ch == "C":
-        return _ansi(BLOCK, CYAN_RGB)
-    if ch == "U":
-        return _ansi(BLOCK, (90, 105, 135))   # anti-alias pixel
-    return " "
-
-BLOCK = "\u2588"          # full block
+# ---- monogram (pixel-extracted from assets/toutur-icon.png) ------------
+MONOGRAM = [
+    ".....................#######............................",
+    ".....................#######............................",
+    ".....................#######............................",
+    ".................++++#######+++++++........+++++++++++++",
+    "................+#################+.......+#############",
+    "................+#################+.....+###############",
+    ".................++++#######++++++....+######++++++++++.",
+    "+++++++++++++++++++..#######......++++#####+............",
+    "###################+.#######.+############+.............",
+    "###################+.#######.+###########+..............",
+    "+++++++++++++++++++..#######..++++++++++++++............",
+    ".....................#######...........+++++++..........",
+    ".....................#######............++++++++++++++++",
+    ".....................#######..............++++++++++++++",
+    ".....................########+...++.....................",
+    ".....................+#############+....................",
+    "......................+#############....................",
+    "........................++#########+....................",
+]
+BLOCK = "\u2588"
 TAGLINE = "Route every prompt to the right skill — before doing the work."
-ASCII_ART = r"""
-  ________          ___   ______  __ __  _______   __
- /_  __/ /  ___ _  / _ | / __/ |/ /_  / __/ _ | / /
-  / / / _ \/ ' \ \/ __ |_\ \/ ,  // _/_\ \/ __ |/ _ \
- /_/ /_//_/_/_/_/_/____/___/_/|_/ /___/___/_/ |_____/
-"""
 
 
-def _rgb(hexs: str) -> tuple[int, int, int]:
-    hexs = hexs.lstrip("#")
-    return int(hexs[0:2], 16), int(hexs[2:4], 16), int(hexs[4:6], 16)
+def _color_ok() -> bool:
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    return sys.stdout.isatty()
 
 
-def _ansi(text: str, rgb: tuple[int, int, int]) -> str:
+def fg(text: str, rgb: tuple[int, int, int]) -> str:
+    if not _color_ok():
+        return text
     return f"\033[38;2;{rgb[0]};{rgb[1]};{rgb[2]}m{text}\033[0m"
 
 
-def _bg(text: str, rgb: tuple[int, int, int]) -> str:
+def bg(text: str, rgb: tuple[int, int, int]) -> str:
+    if not _color_ok():
+        return text
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m{text}\033[0m"
 
 
-def render_logo(solid: bool = True) -> str:
-    """The pixel art, each pixel one full-block, navy background for badge pixels."""
-    out = []
-    for line in LOGO.strip("\n").splitlines():
-        out.append("".join(_pixel(ch) for ch in line))
-    return "\n".join(out)
+# Back-compat: toolr_install.py calls T._ansi / T.CYAN_RGB.
+def _ansi(text: str, rgb: tuple[int, int, int]) -> str:
+    return fg(text, rgb)
+
+
+CYAN_RGB = BLUE_RGB
+
+
+def _px(ch: str, sweep: float = -1.0, x: int = 0, width: int = 56) -> str:
+    if ch == "#":
+        if sweep >= 0.0 and abs(x - sweep) < 2.5:
+            return bg(BLOCK, BLUE_RGB)      # shimmer front: blue on white
+        return fg(BLOCK, TEXT_RGB)
+    if ch == "+":
+        if sweep >= 0.0 and abs(x - sweep) < 2.5:
+            return fg(BLOCK, TEXT_RGB)      # shimmer front: white on blue
+        return fg(BLOCK, BLUE_RGB)
+    return " "
+
+
+def render_logo(t: float = -1.0) -> str:
+    """Static monogram; 0<=t<=1 paints a left-to-right shimmer sweep.
+
+    Terminals narrower than the art (58 cols) get the left portion of each
+    row — the stem stays visible — instead of a missing banner.
+    """
+    term_w = shutil.get_terminal_size((60, 20)).columns
+    sweep = t * (len(MONOGRAM[0]) + 6) - 3 if 0.0 <= t <= 1.0 else -1.0
+    keep = max(20, term_w - 2)                # never render narrower than the stem
+    rows = []
+    for line in MONOGRAM:
+        rows.append("  " + "".join(_px(ch, sweep, x)
+                                   for x, ch in enumerate(line[:keep])))
+    return "\n".join(rows)
 
 
 def banner(title: str = "Toutur installer") -> str:
-    art = render_logo()
-    t = _ansi(title, (255, 255, 255))
-    tag = _ansi(TAGLINE, _rgb(CYAN))
-    return f"{art}\n  {t}\n  {tag}\n"
+    return f"{render_logo()}\n\n  {fg(title, TEXT_RGB)}\n  {fg(TAGLINE, BLUE_RGB)}\n"
 
 
-# ---- rich TUI steps (pure stdlib when rich is absent) -------------------
+# ---- steps --------------------------------------------------------------
 STEPS = [
-    "Starting installer",
-    "Checking Python + dependencies",
-    "Identifying installed harnesses",
-    "Installing router into each harness",
+    "Probing harnesses",
+    "Laying skills into each harness",
+    "Wiring per-prompt interceptors",
     "Building the capability index",
     "Verifying routes",
     "Done",
 ]
 
 
-def render_steps(done: int, harnesses: list[str] | None = None) -> str:
+def render_steps(done: int, harnesses: list[str] | None = None,
+                 detail: dict[int, str] | None = None) -> str:
     lines = []
     for i, step in enumerate(STEPS):
         if i < done:
-            mark = _ansi("\u2713", (80, 220, 120))       # green
-            text = _ansi(step, (150, 160, 175))
+            mark, text = fg("●", BLUE2_RGB), fg(step, MUTED_RGB)
         elif i == done:
-            mark = _ansi("\u25b8", CYAN_RGB)             # cyan arrow
-            text = _ansi(step, (255, 255, 255))
+            mark, text = fg("◐", BLUE_RGB), fg(step, TEXT_RGB)
         else:
-            mark = _ansi("\u2502", (90, 95, 105))
-            text = _ansi(step, (90, 95, 105))
-        lines.append(f"  {mark} {text}")
-        if step == "Identifying installed harnesses" and harnesses and i == done:
+            mark, text = fg("○", HAIRLINE_RGB), fg(step, HAIRLINE_RGB)
+        lines.append(f"  {mark}  {text}")
+        if detail and detail.get(i):
+            lines.append(f"     {fg(detail[i], MUTED_RGB)}")
+        if harnesses and step == "Probing harnesses" and i == done:
             for h in harnesses:
-                lines.append(f"      {_ansi('• ' + h, CYAN_RGB)}")
+                lines.append(f"       {fg('· ' + h, BLUE_RGB)}")
     return "\n".join(lines)
 
 
 def render_harness_table(rows: list[tuple[str, str, str]]) -> str:
-    """(harness, status) -> styled lines. status: installed / skipped / already / fail."""
-    out = ["", _ansi("  Harness           Status", (200, 205, 215))]
-    out.append("  " + _ansi("─" * 40, (60, 65, 75)))
-    for name, status, detail in rows:
-        color = {"installed": (80, 220, 120), "already": CYAN_RGB,
-                 "skipped": (180, 180, 180), "fail": (240, 90, 90)}.get(status, (200, 200, 200))
-        pad = name.ljust(16)
-        out.append(f"  {_ansi(pad, (230, 230, 235))} {_ansi(status, color)}"
-                   + (f"  {_ansi(detail, (130, 135, 145))}" if detail else ""))
+    """(harness, status, path) -> aligned status table.
+
+    Statuses: installed / already / skipped / fail. Success is blue-2 — the
+    landing page is blue-only, green stays out of the brand.
+    """
+    marks = {"installed": ("✔", BLUE2_RGB), "already": ("●", BLUE_RGB),
+             "skipped": ("○", MUTED_RGB), "fail": ("✘", FAIL_RGB)}
+    if not rows:
+        return ""
+    name_w = max(len("Harness"), max(len(r[0]) for r in rows))
+    stat_w = max(len("Status"), max(len(r[1]) for r in rows))
+    loc_w = max(len("Location"), max(len(r[2]) for r in rows))
+    head = "Harness".ljust(name_w) + "  " + "Status".ljust(stat_w) + "  Location"
+    out = ["", "  " + fg(head, TEXT_RGB),
+           "  " + fg("─" * len(head), HAIRLINE_RGB)]
+    for name, status, path in rows:
+        mark, color = marks.get(status, ("·", MUTED_RGB))
+        out.append("  " + fg(name.ljust(name_w) + "  ", TEXT_RGB)
+                   + fg(f"{mark} {status}".ljust(stat_w + 2), color)
+                   + "  " + fg(path.ljust(loc_w), MUTED_RGB))
     return "\n".join(out)

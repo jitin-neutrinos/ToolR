@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""toolr_install.py — the Toutur rich TUI installer.
+"""toolr_install.py — the Toutur TUI installer.
 
-Wraps install.py's detection/wiring with a branded terminal UI:
-pixel-art logo -> step-by-step progress -> per-harness status table.
+Wraps install.py's detection/wiring with the branded terminal UI: the real
+monogram (pixel-extracted from the icon) sweeps in at 60fps, steps advance
+as install.py actually reports them, and the run ends on a status table +
+light-wave finale. Colors mirror the landing page; piped output gets the
+same facts with zero escape codes.
 
   python3 toolr_install.py            # install everywhere detected
   python3 toolr_install.py --demo     # render the TUI without changing anything
@@ -12,7 +15,6 @@ Plus install.py's flags pass through (--harness, --copy, --no-hooks, ...).
 from __future__ import annotations
 
 import argparse
-import itertools
 import os
 import subprocess
 import sys
@@ -33,13 +35,15 @@ DISPLAY = {
     "opencode": "OpenCode",
     "agy": "Antigravity (agy)",
     "openclaw": "OpenClaw",
+    "hermes": "Hermes",
     "agents": "~/.agents (shared)",
 }
 SKILL_PATHS = {
     "claude": "~/.claude/skills", "codex": "~/.agents/skills",
     "gemini": "~/.gemini/skills", "cursor": "~/.cursor/skills",
     "opencode": "~/.config/opencode/skills", "agy": "~/.gemini/config/skills",
-    "openclaw": "~/.openclaw/skills", "agents": "~/.agents/skills",
+    "openclaw": "~/.openclaw/skills", "hermes": "~/.hermes/skills/tools",
+    "agents": "~/.agents/skills",
 }
 
 
@@ -49,15 +53,16 @@ def _detect() -> list[str]:
     probes = {
         "claude": "~/.claude", "codex": "~/.codex", "gemini": "~/.gemini",
         "cursor": "~/.cursor", "opencode": "~/.config/opencode",
-        "agy": "~/.gemini/config", "openclaw": "~/.openclaw", "agents": "~/.agents",
+        "agy": "~/.gemini/config", "openclaw": "~/.openclaw",
+        "hermes": "~/.hermes", "agents": "~/.agents",
     }
     home = Path(os.path.expanduser("~"))
     for name, p in probes.items():
-        if any((home / pp.lstrip("~/")).is_dir() for pp in [p]):
+        if (home / p.lstrip("~/")).is_dir():
             out.append(name)
-    # agy and gemini both probe ~/.gemini*; keep the order claude-first
+    # agy and gemini both probe ~/.gemini*; keep the canonical order
     return [n for n in ("claude", "codex", "gemini", "cursor", "opencode",
-                        "agy", "openclaw", "agents") if n in out]
+                        "agy", "openclaw", "hermes", "agents") if n in out]
 
 
 def _already_installed(name: str) -> bool:
@@ -66,9 +71,12 @@ def _already_installed(name: str) -> bool:
     return bool(root) and (Path(root) / "tool-router").exists()
 
 
-def _step(msg: str, done: bool = False) -> None:
-    mark = T._ansi("✔", (80, 220, 120)) if done else T._ansi("▸", T.CYAN_RGB)
-    print(f"  {mark} {msg}", flush=True)
+def _progress_reader(proc, on_line) -> None:
+    """Stream install.py's stdout; each line goes to on_line(line)."""
+    for raw in proc.stdout:
+        line = raw.rstrip()
+        if line:
+            on_line(line)
 
 
 def run_demo(args) -> int:
@@ -80,72 +88,119 @@ def run_demo(args) -> int:
     print(T.render_steps(3, [DISPLAY.get(h, h) for h in found]))
     print(T.render_harness_table(rows))
     print()
-    print(T._ansi("  (demo — nothing was changed)", (140, 145, 155)))
+    print(T.fg("  (demo — nothing was changed)", T.MUTED_RGB))
     return 0
 
 
 def run_install(args) -> int:
     t0 = time.time()
-    print(T.banner("Toutur installer"))
     try:
         import toolr_anim as A
     except Exception:
         A = None
 
-    # Step 1 — probe (animated when on a TTY)
-    found = []
+    tty = A and A._tty() if A else False
+
+    # Intro: static banner when piped; monogram + title fade-in on a TTY.
+    if tty:
+        art = T.render_logo().splitlines()
+        print("\n".join(art))
+        print(f"\n  {T.fg('Toutur installer', T.TEXT_RGB)}\n"
+              f"  {T.fg(T.TAGLINE, T.BLUE_RGB)}\n")
+    else:
+        print(T.banner("Toutur installer"))
+
+    # Step 1 — probe
     if A:
         with A.Spinner("probing harnesses…") as s:
             found = _detect()
-            time.sleep(0.3)
+            time.sleep(0.25)
             s.stop(final=f"{len(found)} harness(es) found: "
                    + ", ".join(DISPLAY.get(h, h) for h in found))
     else:
         found = _detect()
-        print(T.render_steps(2, [DISPLAY.get(h, h) for h in found]), flush=True)
+        print(f"  ▸ {len(found)} harness(es) found: "
+              + ", ".join(DISPLAY.get(h, h) for h in found))
 
     if not found:
-        print(T.render_steps(3, None))
-        print(T._ansi("\n  No supported harness found on this machine.", (240, 90, 90)))
-        print(T._ansi("  Pass --harness NAME to force one, or install a harness first.",
-                      (240, 90, 90)))
+        print(T.fg("\n  No supported harness found on this machine.", T.FAIL_RGB))
+        print(T.fg("  Pass --harness NAME to force one, or install a harness first.",
+                   T.FAIL_RGB))
         return 1
 
-    # Step 2 — install (real work streamed under an animated progress line)
+    # Step 2 — install. install.py streams; we ride its real output.
     print()
     cmd = [sys.executable, str(HERE / "install.py")] + args.forward
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1)
     rows: list[tuple[str, str, str]] = []
-    tick = itertools.count()
-    for line in proc.stdout:
-        line = line.rstrip()
-        if not line:
-            continue
-        print(T._ansi("      " + line, (150, 158, 170)), flush=True)
-        if A and next(tick) % 4 == 0:
-            print("\r\033[K" + A.progress(min(0.9, next(tick) / 24),
-                                          label="laying skills + wiring hooks"), end="")
-        if line.startswith("detected harnesses:"):
-            names = line.split(":", 1)[1].strip()
-            rows = [(DISPLAY.get(n, n) or n, "installed", "") for n in names.split(", ") if n]
-    proc.wait()
-    if A:
-        print("\r\033[K" + A.progress(1.0, label="done"))
-    print()
+    harness_count = len(found)
 
+    if A and tty:
+        import threading
+        import itertools
+        done = threading.Event()
+        tick = itertools.count()
+
+        def pump():
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                line = raw.rstrip()
+                if not line:
+                    continue
+                if line.startswith("detected harnesses:"):
+                    names = line.split(":", 1)[1].strip()
+                    rows[:] = [(DISPLAY.get(n, n) or n, "installed", "")
+                               for n in names.split(", ") if n]
+                sys.stdout.write("\r\033[K" + T.fg("      " + line, T.MUTED_RGB) + "\n")
+                sys.stdout.flush()
+                next(tick)
+            done.set()
+
+        threading.Thread(target=pump, daemon=True).start()
+        last = 0.0
+        while not done.is_set():
+            frac = min(0.9, (time.time() - t0) / 4.0)
+            now = time.perf_counter()
+            if now - last > 1 / 60:
+                sys.stdout.write("\r\033[K" + A.progress(A.ease_out_expo(frac) * 0.9,
+                                                         label="laying skills + wiring hooks"))
+                sys.stdout.flush()
+                last = now
+            time.sleep(1 / 60)
+        proc.wait()
+        sys.stdout.write("\r\033[K" + A.progress(1.0, label="done") + "\n")
+        sys.stdout.flush()
+    else:
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.rstrip()
+            if not line:
+                continue
+            print(T.fg("      " + line, T.MUTED_RGB), flush=True)
+            if line.startswith("detected harnesses:"):
+                names = line.split(":", 1)[1].strip()
+                rows = [(DISPLAY.get(n, n) or n, "installed", "")
+                        for n in names.split(", ") if n]
+        proc.wait()
+
+    print()
     ms = (time.time() - t0) * 1000
-    print(T.render_harness_table(rows or [(DISPLAY.get(h, h), "installed", "") for h in found]))
+    if not rows:
+        rows = [(DISPLAY.get(h, h),
+                 "already" if _already_installed(h) else "installed",
+                 SKILL_PATHS.get(h, "")) for h in found]
+    print(T.render_harness_table(rows))
     print()
     if proc.returncode == 0 and A:
         A.celebrate([
-            f"Toutur installed in {ms:.0f} ms across {len(found)} harness(es)",
+            f"Toutur installed in {ms:.0f} ms across {harness_count} harness(es)",
             'try:  ~/.tool-router/route "your request here"',
         ])
     else:
-        mark = T._ansi("✔", (80, 220, 120)) if proc.returncode == 0 else T._ansi("✘", (240, 90, 90))
+        mark = T.fg("✔", T.BLUE2_RGB) if proc.returncode == 0 else T.fg("✘", T.FAIL_RGB)
         print(f"  {mark} Toutur {'installed' if proc.returncode == 0 else 'FAILED'} in {ms:.0f} ms")
-        print(T._ansi('  ~/.tool-router/route "your request here"', (245, 248, 252)))
+        print(T.fg('  ~/.tool-router/route "your request here"', T.TEXT_RGB))
     return proc.returncode
 
 
