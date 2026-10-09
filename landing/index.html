@@ -21,13 +21,14 @@
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 <style>
 :root{
+  color-scheme:dark;
   --void:#0a0a0f; --midnight:#12121a; --depth:#1a1a2e;
   --blue:#22d3ee; --blue-2:#38bdf8; --blue-soft:rgba(34,211,238,.13);
   --text:#f8fafc; --muted:#939bab; --hairline:rgba(255,255,255,.08);
   --ease:cubic-bezier(.16,1,.3,1);
 }
 section[id]{scroll-margin-top:96px}
-*{margin:0;padding:0;box-sizing:border-box;border-color:var(--hairline)}
+*{margin:0;padding:0;box-sizing:border-box;border-color:var(--hairline);-webkit-tap-highlight-color:transparent}
 html{scroll-behavior:smooth}
 body{background:var(--void);color:var(--text);font-family:'DM Sans',sans-serif;
   font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
@@ -57,7 +58,7 @@ a{color:var(--blue);text-decoration:none}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
 
 /* ---------- nav ---------- */
-nav{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:50;
+nav{position:fixed;top:calc(18px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:50;
   display:flex;align-items:center;gap:24px;padding:.65rem 1.3rem;border-radius:999px;
   background:rgba(18,18,26,.66);backdrop-filter:blur(20px);border:1px solid var(--hairline);
   transition:padding .5s var(--ease),background .5s var(--ease)}
@@ -67,7 +68,7 @@ nav .brand{font-family:'Playfair Display',serif;font-size:19px;color:var(--text)
 nav .brand i{width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,var(--blue),var(--blue-2));display:inline-block}
 nav a.navlink{color:var(--muted);font-size:13.5px;transition:color .4s var(--ease)}
 nav a.navlink:hover{color:var(--text)}
-nav .cta{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--void);
+nav .cta{font-family:'JetBrains Mono',monospace;font-size:12px;white-space:nowrap;color:var(--void);
   background:linear-gradient(135deg,var(--blue),var(--blue-2));padding:.36rem .85rem;border-radius:999px;
   transition:transform .4s var(--ease),box-shadow .4s var(--ease)}
 nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,.35)}
@@ -101,7 +102,7 @@ nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,
 .hm{display:flex;flex-direction:column;gap:2px}
 .hm b{font-family:'Playfair Display',serif;font-size:1.65rem;font-weight:500;color:var(--text)}
 .hm b i{font-style:normal;color:var(--blue)}
-.hm span{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);
+.hm span{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
   text-transform:uppercase;letter-spacing:.14em}
 
 /* ---------- terminal demo ---------- */
@@ -116,7 +117,7 @@ nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,
 .term-body .ln{white-space:pre-wrap;word-break:break-word}
 .term-body .p{color:var(--blue)}
 .term-body .c{color:#e8edf4}
-.term-body .d{color:#5b6478}
+.term-body .d{color:#7e899a}
 .term-body .s{color:var(--blue)}
 .term-body .g{color:#7dd3fc}
 .cursor{display:inline-block;width:7px;height:15px;background:var(--blue);
@@ -128,7 +129,7 @@ nav .cta:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(34,211,238,
   border-bottom:1px solid var(--hairline);padding:20px 0;overflow:hidden;
   background:rgba(14,14,20,.5)}
 .mq-track{display:flex;gap:56px;width:max-content;animation:mq 32s linear infinite}
-.mq-track span{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6b7688;
+.mq-track span{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7b8698;
   text-transform:uppercase;letter-spacing:.16em;display:flex;align-items:center;gap:56px;white-space:nowrap}
 .mq-track span::after{content:"◆";color:var(--blue);opacity:.5;font-size:9px}
 @keyframes mq{to{transform:translateX(-50%)}}
@@ -149,7 +150,7 @@ section{padding:110px 0;position:relative;z-index:2}
   background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(34,211,238,.09),transparent 45%)}
 .cell:hover::before{opacity:1}
 .cell.tint{background:radial-gradient(120% 140% at 85% 0%,rgba(34,211,238,.07),transparent 55%),rgba(18,18,26,.55)}
-.cell .tag{font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:uppercase;
+.cell .tag{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;
   letter-spacing:.16em;color:var(--blue);margin-bottom:12px;display:block}
 .cell h3{font-size:1.3rem;margin-bottom:10px}
 .cell p{font-size:14.5px}
@@ -194,7 +195,7 @@ section{padding:110px 0;position:relative;z-index:2}
 .layers{display:flex;flex-direction:column}
 .band{border:1px solid var(--hairline);border-radius:16px;background:rgba(18,18,26,.6);
   padding:16px 18px;box-shadow:inset 0 1px 1px rgba(255,255,255,.04)}
-.band .blabel{font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:uppercase;
+.band .blabel{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;
   letter-spacing:.16em;color:var(--blue);margin-bottom:10px;display:block}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c9d3de;
@@ -217,12 +218,34 @@ section{padding:110px 0;position:relative;z-index:2}
 .msg .lbl b{color:var(--text);font-weight:500}
 
 /* ---------- tables ---------- */
-table{width:100%;border-collapse:collapse;margin-top:34px;font-size:14px}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:34px}
+table{width:100%;border-collapse:collapse;font-size:14px}
 th{font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;
   letter-spacing:.12em;color:var(--muted);text-align:left;padding:12px 16px;border-bottom:1px solid var(--hairline)}
 td{padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.045);color:var(--muted)}
 td:first-child{color:var(--text);font-weight:500}
 tr:hover td{background:rgba(34,211,238,.035)}
+@media(max-width:700px){
+  th,td{padding:12px 14px}
+  th{font-size:10.5px}
+}
+@media(max-width:560px){
+  table{font-size:13px;background:var(--void);border-radius:12px}
+  th,td{padding:11px 10px}
+  th:first-child,td:first-child{position:sticky;left:0;background:var(--void);
+    box-shadow:1px 0 0 var(--hairline);min-width:110px}
+  tr:hover td{background:none}
+}
+.scroll-hint{display:none}
+@media(max-width:700px){
+  .scroll-hint{display:flex;align-items:center;gap:.5rem;font-family:'JetBrains Mono',monospace;
+    font-size:11px;color:var(--muted);margin-top:10px}
+  .scroll-hint i{display:block;width:22px;height:1px;background:var(--muted);position:relative}
+  .scroll-hint i::after{content:"";position:absolute;right:0;top:-2.5px;border:3px solid transparent;border-left-color:var(--muted)}
+}
+@media(max-width:560px){
+  .scroll-hint{font-size:11.5px}
+}
 .pill{font-family:'JetBrains Mono',monospace;font-size:11px;padding:.2rem .6rem;border-radius:999px}
 .pill.strong{color:#062a33;background:var(--blue);border:1px solid var(--blue)}
 .pill.soft{color:var(--blue);background:var(--blue-soft);border:1px solid rgba(34,211,238,.3)}
@@ -234,6 +257,7 @@ tr:hover td{background:rgba(34,211,238,.035)}
 .cta-panel h2{font-size:clamp(1.8rem,3.2vw,2.6rem);margin-bottom:14px}
 .cta-panel h2 em{font-style:italic;color:var(--blue)}
 .cta-panel p{max-width:480px;margin:0 auto 30px}
+.cta-panel p a{display:inline-block;padding:.5rem 0;margin:-.5rem 0}
 .big-install{display:inline-flex;align-items:center;gap:0;max-width:600px;width:100%;
   border-radius:14px;overflow:hidden;position:relative;background:rgba(18,18,26,.9);padding:1px}
 .big-install::before{content:"";position:absolute;inset:-60%;
@@ -241,6 +265,8 @@ tr:hover td{background:rgba(34,211,238,.035)}
   animation:spin 5.5s linear infinite}
 .big-install::after{content:"";position:absolute;inset:1px;border-radius:13px;background:rgba(14,14,20,.97)}
 .big-install > *{position:relative;z-index:1}
+.big-code{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);padding:1rem .6rem 1rem .35rem;flex:1;min-width:0;white-space:nowrap;overflow-x:auto}
+@media(max-width:560px){.big-code{white-space:normal;word-break:break-all;font-size:11.5px;padding-right:.6rem}}
 
 /* ---------- reveal ----------
    Gated on html.anim: the GSAP choreography adds the class only after it
@@ -249,6 +275,8 @@ tr:hover td{background:rgba(34,211,238,.035)}
 .anim .rv{opacity:0}
 
 footer{border-top:1px solid var(--hairline);padding:46px 0 64px;margin-top:30px;position:relative;z-index:2}
+footer .links a,footer p a{display:inline-block;padding:.55rem 0}
+footer p a{margin:-.55rem 0}
 footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:18px;align-items:center}
 footer p{font-size:13px}
 footer .links{display:flex;gap:20px;font-size:13px}
@@ -262,13 +290,18 @@ footer .links{display:flex;gap:20px;font-size:13px}
 }
 @media(max-width:560px){
   .wrap{padding:0 18px}
+  footer .links{gap:6px 26px}
+  footer .links a{padding:.55rem .2rem}
   .hero{padding-top:110px}
   .hero-copy{min-width:0;max-width:100%}
   .hero h1{max-width:100%;font-size:clamp(1.9rem,8.6vw,2.6rem)}
   .hero .sub{max-width:100%}
   .install,.big-install{max-width:100%;flex-wrap:nowrap}
-  .install code,.big-install code{white-space:normal;word-break:break-all;font-size:11.5px;padding-right:.6rem}
-  .copy{padding:.7rem .7rem;font-size:10.5px;flex-shrink:0}
+  .install code,.big-install code,.big-code{white-space:nowrap;word-break:normal;font-size:11.5px;padding-right:.6rem}
+  .install,.big-install{position:relative}
+  .install::after{content:"";position:absolute;right:52px;top:1px;bottom:1px;width:26px;
+    background:linear-gradient(90deg,transparent,rgba(14,14,20,.97));z-index:2;pointer-events:none}
+  .copy{padding:.7rem .7rem;font-size:11px;flex-shrink:0}
   .eyebrow{letter-spacing:.12em;font-size:10px;max-width:100%}
   .hero-meta{gap:18px}
   .term-body{font-size:11px;min-height:280px;padding:14px}
@@ -281,6 +314,7 @@ footer .links{display:flex;gap:20px;font-size:13px}
   .msg .lbl{min-width:100%}
 }
 @media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
   *{animation:none!important;transition:none!important}
   .anim .rv{opacity:1}
   .install::before,.big-install::before{display:none}
@@ -483,8 +517,9 @@ footer .links{display:flex;gap:20px;font-size:13px}
     <h2>Eight harnesses, <em>one brain</em></h2>
     <p>Install once; Toutur finds every supported harness, wires the right interceptor for each, then keeps all of it alive through updates.</p>
   </div>
-  <div class="rv" style="overflow-x:auto">
-  <table>
+  <div class="rv">
+    <div class="table-scroll">
+    <table>
     <tr><th>Harness</th><th>Interceptor</th><th>Card style</th><th>Enforcement</th></tr>
     <tr><td>Claude Code</td><td>UserPromptSubmit hook</td><td>hook JSON</td><td><span class="pill strong">deny-once gate</span></td></tr>
     <tr><td>Hermes gateway</td><td>pre_gateway_dispatch plugin</td><td>markdown + canvas UI</td><td><span class="pill soft">plugin-side</span></td></tr>
@@ -494,7 +529,9 @@ footer .links{display:flex;gap:20px;font-size:13px}
     <tr><td>Gemini CLI</td><td>skill + mandate</td><td>agent-invoked</td><td><span class="pill soft">protocol</span></td></tr>
     <tr><td>Cursor</td><td>sessionStart hook</td><td>session card</td><td><span class="pill soft">protocol</span></td></tr>
     <tr><td>OpenClaw</td><td>skill + mandate</td><td>agent-invoked</td><td><span class="pill soft">protocol</span></td></tr>
-  </table>
+    </table>
+    </div>
+    <p class="scroll-hint"><i></i> swipe the table sideways for the remaining columns</p>
   </div>
 </section>
 
@@ -506,7 +543,7 @@ footer .links{display:flex;gap:20px;font-size:13px}
       <p>Detects your harnesses, wires each one, indexes the corpus, verifies with a live card. No accounts, no keys, no cloud.</p>
       <div class="big-install">
         <span class="prompt">$</span>
-        <code style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text);padding:1rem .6rem 1rem .35rem;flex:1;white-space:nowrap;overflow-x:auto">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</code>
+        <code class="big-code">curl -fsSL https://toutur.jitinnair.com/install.sh | bash</code>
         <button class="copy" data-copy="cmd-unix">copy</button>
       </div>
       <p style="margin-top:22px;font-size:14px">Windows, macOS and step-by-step instructions on the <a href="/install/">install page</a>.</p>
